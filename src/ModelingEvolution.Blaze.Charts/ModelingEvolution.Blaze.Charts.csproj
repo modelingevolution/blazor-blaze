@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <PackageId>ModelingEvolution.Blaze.Charts</PackageId>
+    <Title>ModelingEvolution Blaze - High-Performance Charts</Title>
+    <Description>High-performance chart components for Blazor using SkiaSharp. Includes bar charts, time-series graphs, and real-time streaming visualizations.</Description>
+    <PackageTags>Blazor;Charts;Visualization;SkiaSharp;Real-time;Performance;Bar-Chart;Time-Series</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ModelingEvolution.Blaze\ModelingEvolution.Blaze.csproj" />
+  </ItemGroup>
+
+</Project>

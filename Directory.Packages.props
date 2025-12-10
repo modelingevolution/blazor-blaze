@@ -1,0 +1,38 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SkiaSharp -->
+    <PackageVersion Include="SkiaSharp.Views.Blazor" Version="3.119.1" />
+
+    <!-- ASP.NET Core -->
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.0" />
+
+    <!-- Serialization -->
+    <PackageVersion Include="protobuf-net" Version="3.2.56" />
+    <PackageVersion Include="MessagePack" Version="3.1.4" />
+
+    <!-- Reactive -->
+    <PackageVersion Include="System.Reactive" Version="6.0.1" />
+
+    <!-- ModelingEvolution -->
+    <PackageVersion Include="ModelingEvolution.Drawing" Version="1.0.63.45" />
+    <PackageVersion Include="ModelingEvolution.Bytes" Version="3.0.0" />
+
+    <!-- Testing -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="FluentAssertions" Version="8.8.0" />
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="bunit" Version="2.1.1" />
+
+    <!-- Playwright -->
+    <PackageVersion Include="Microsoft.Playwright.NUnit" Version="1.56.0" />
+  </ItemGroup>
+</Project>
