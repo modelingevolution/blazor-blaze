@@ -1,0 +1,126 @@
+@page "/timeseries"
+@rendermode InteractiveWebAssembly
+@using ModelingEvolution.BlazorBlaze.Charts
+@using SkiaSharp
+@using SkiaSharp.Views.Blazor
+@implements IDisposable
+
+<PageTitle>Time Series Chart Demo</PageTitle>
+
+<h1>Time Series Chart Demo</h1>
+
+<div style="width: 800px; height: 400px; border: 1px solid #ccc;">
+    <SKCanvasView @ref="_canvasView" OnPaintSurface="OnPaintSurface" style="width: 100%; height: 100%;" />
+</div>
+
+<div class="mt-3">
+    <button class="btn btn-success me-2" @onclick="StartStreaming" disabled="@_isStreaming">Start</button>
+    <button class="btn btn-danger" @onclick="StopStreaming" disabled="@(!_isStreaming)">Stop</button>
+</div>
+
+@code {
+    private SKCanvasView? _canvasView;
+    private TimeSeriesChart _chart = new();
+    private TimeSeriesF[] _series = Array.Empty<TimeSeriesF>();
+    private uint[] _timestamps = new uint[120];
+    private float[] _cpuData = new float[120];
+    private float[] _memData = new float[120];
+    private System.Timers.Timer? _timer;
+    private bool _isStreaming;
+    private float _cpuValue = 50f;
+    private float _memValue = 30f;
+
+    protected override void OnInitialized()
+    {
+        // Initialize with baseline data
+        var now = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        for (int i = 0; i < 120; i++)
+        {
+            _timestamps[i] = now - (uint)((119 - i) * 500); // 500ms intervals
+            _cpuData[i] = 50f;
+            _memData[i] = 30f;
+        }
+
+        // Create two series: CPU and Memory
+        _series = new[]
+        {
+            new TimeSeriesF { Label = "CPU", Data = _cpuData, Count = 120, Color = SKColors.LimeGreen },
+            new TimeSeriesF { Label = "Memory", Data = _memData, Count = 120, Color = SKColors.DeepSkyBlue }
+        };
+
+        UpdateChart();
+    }
+
+    private void UpdateChart()
+    {
+        _chart.Setup(
+            title: "System Metrics",
+            series: _series,
+            timestamps: _timestamps,
+            timestampCount: 120,
+            timeWindowMs: 60000,
+            useDynamicScale: false
+        );
+    }
+
+    private void StartStreaming()
+    {
+        _isStreaming = true;
+        _timer = new System.Timers.Timer(500);
+        _timer.Elapsed += OnTimerTick;
+        _timer.Start();
+    }
+
+    private void StopStreaming()
+    {
+        _isStreaming = false;
+        _timer?.Stop();
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    private void OnTimerTick(object? sender, System.Timers.ElapsedEventArgs e)
+    {
+        // Shift data left
+        for (int i = 0; i < 119; i++)
+        {
+            _timestamps[i] = _timestamps[i + 1];
+            _cpuData[i] = _cpuData[i + 1];
+            _memData[i] = _memData[i + 1];
+        }
+
+        // Add new data point
+        var now = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        _timestamps[119] = now;
+
+        // Simulate CPU and Memory with some variance
+        _cpuValue += (Random.Shared.NextSingle() - 0.5f) * 20f;
+        _cpuValue = Math.Clamp(_cpuValue, 10f, 90f);
+        _memValue += (Random.Shared.NextSingle() - 0.5f) * 10f;
+        _memValue = Math.Clamp(_memValue, 20f, 80f);
+
+        _cpuData[119] = _cpuValue;
+        _memData[119] = _memValue;
+
+        _chart.UpdateDynamicScale();
+
+        InvokeAsync(() => _canvasView?.Invalidate());
+    }
+
+    private void OnPaintSurface(SKPaintSurfaceEventArgs e)
+    {
+        var canvas = e.Surface.Canvas;
+        canvas.Clear(new SKColor(30, 30, 40));
+
+        _chart.Location = new SKPoint(0, 0);
+        _chart.Size = new SKSize(e.Info.Width, e.Info.Height);
+        _chart.Render(canvas);
+    }
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
+        _chart.Dispose();
+    }
+}

@@ -41,3 +41,7 @@ Thumbs.db
 # Playwright
 playwright-report/
 test-results/
+
+# Sample app build artifacts
+publish/
+server.log

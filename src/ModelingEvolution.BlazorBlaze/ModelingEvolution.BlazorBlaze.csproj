@@ -20,7 +20,12 @@
     <PackageReference Include="SkiaSharp.Views.Blazor" />
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
     <PackageReference Include="ModelingEvolution.Drawing" />
+    <PackageReference Include="ModelingEvolution.Bytes" />
     <PackageReference Include="System.Reactive" />
+    <PackageReference Include="System.Collections.Immutable" />
+    <PackageReference Include="Nito.AsyncEx" />
+    <PackageReference Include="protobuf-net" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
 </Project>
