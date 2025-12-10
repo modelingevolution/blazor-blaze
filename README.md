@@ -58,7 +58,7 @@ SkiaSharp-based charts for data visualization.
 @using SkiaSharp
 @using SkiaSharp.Views.Blazor
 
-<SKCanvasView OnPaintSurface="OnPaintSurface" />
+<SKCanvasView OnPaintSurface="OnPaintSurface" EnableRenderLoop="true" />
 
 @code {
     private BarChart _chart = new();
