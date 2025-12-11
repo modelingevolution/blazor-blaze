@@ -1,4 +1,6 @@
 using System.Net.WebSockets;
+using System.Numerics;
+using System.Runtime.CompilerServices;
 using ModelingEvolution.BlazorBlaze.VectorGraphics;
 using ModelingEvolution.BlazorBlaze.VectorGraphics.Protocol;
 using SampleApp.Client.Pages;
@@ -55,8 +57,10 @@ static async Task StreamStressTestFrames(WebSocket webSocket, CancellationToken 
     const int TargetTotalPoints = 20000;
     const int PointsPerPolygon = 200;
     const int PolygonCount = TargetTotalPoints / PointsPerPolygon;
-    const int CanvasWidth = 1200;
-    const int CanvasHeight = 800;
+    const float CanvasWidth = 1200f;
+    const float CanvasHeight = 800f;
+    const float TwoPi = MathF.PI * 2f;
+    const float AngleStep = TwoPi / PointsPerPolygon;
 
     var colors = new RgbColor[]
     {
@@ -72,48 +76,120 @@ static async Task StreamStressTestFrames(WebSocket webSocket, CancellationToken 
         polygonPoints[i] = new SKPoint[PointsPerPolygon];
     }
 
-    ulong frameId = 0;
-    double time = 0;
+    // Pre-compute trig lookup tables for all polygon points (pure float)
+    var sinTable = new float[PointsPerPolygon];
+    var cosTable = new float[PointsPerPolygon];
+    // Pre-compute 5x angle multiplier for radius variation
+    var sin5Table = new float[PointsPerPolygon];
+    var cos5Table = new float[PointsPerPolygon];
+    for (int i = 0; i < PointsPerPolygon; i++)
+    {
+        float angle = AngleStep * i;
+        sinTable[i] = MathF.Sin(angle);
+        cosTable[i] = MathF.Cos(angle);
+        sin5Table[i] = MathF.Sin(5f * angle);
+        cos5Table[i] = MathF.Cos(5f * angle);
+    }
 
-    // Grid layout for polygons
-    int cols = 10;
-    int rows = PolygonCount / cols;
-    float cellWidth = CanvasWidth / (float)cols;
-    float cellHeight = CanvasHeight / (float)rows;
+    // Pre-compute polygon grid positions
+    const int cols = 10;
+    const int rows = PolygonCount / cols;
+    const float cellWidth = CanvasWidth / cols;
+    const float cellHeight = CanvasHeight / rows;
+    float baseRadius = MathF.Min(cellWidth, cellHeight) * 0.35f;
+
+    var centerX = new float[PolygonCount];
+    var centerY = new float[PolygonCount];
+    var polyPhaseOffset = new float[PolygonCount];
+    for (int polyIdx = 0; polyIdx < PolygonCount; polyIdx++)
+    {
+        int col = polyIdx % cols;
+        int row = polyIdx / cols;
+        centerX[polyIdx] = (col + 0.5f) * cellWidth;
+        centerY[polyIdx] = (row + 0.5f) * cellHeight;
+        polyPhaseOffset[polyIdx] = polyIdx * 0.3f;
+    }
+
+    ulong frameId = 0;
+    float time = 0f;
+    const float TimeIncrement = 1f / 60f; // 60 FPS animation speed
 
     var buffer = new byte[512 * 1024]; // 512KB buffer for frame encoding
 
-    // Use PeriodicTimer for precise 30 FPS timing
-    using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(33));
+    // Use PeriodicTimer for precise 60 FPS timing (~16.67ms)
+    using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(16));
 
     while (webSocket.State == WebSocketState.Open && !ct.IsCancellationRequested)
     {
         frameId++;
-        time += 0.02;
+        time += TimeIncrement;
 
-        // Generate animated polygon points
+        // Generate animated polygon points (SIMD-friendly vectorized loop)
         for (int polyIdx = 0; polyIdx < PolygonCount; polyIdx++)
         {
-            int col = polyIdx % cols;
-            int row = polyIdx / cols;
+            float cx = centerX[polyIdx];
+            float cy = centerY[polyIdx];
+            float phase = time + polyPhaseOffset[polyIdx];
+            float sinPhase = MathF.Sin(phase);
+            float cosPhase = MathF.Cos(phase);
+            float animatedRadius = baseRadius * (0.5f + 0.5f * sinPhase);
 
-            float centerX = (col + 0.5f) * cellWidth;
-            float centerY = (row + 0.5f) * cellHeight;
-
-            double phase = time + polyIdx * 0.3;
-            float baseRadius = Math.Min(cellWidth, cellHeight) * 0.35f;
-            float animatedRadius = baseRadius * (0.5f + 0.5f * (float)Math.Sin(phase));
+            // For radius variation: sin(5*angle + phase*2) = sin(5*angle)*cos(phase*2) + cos(5*angle)*sin(phase*2)
+            float phase2 = phase * 2f;
+            float sinPhase2 = MathF.Sin(phase2);
+            float cosPhase2 = MathF.Cos(phase2);
 
             var points = polygonPoints[polyIdx];
-            for (int i = 0; i < PointsPerPolygon; i++)
+
+            // Process in batches of Vector<float>.Count for SIMD
+            int vectorSize = Vector<float>.Count;
+            int vectorEnd = PointsPerPolygon - (PointsPerPolygon % vectorSize);
+
+            for (int i = 0; i < vectorEnd; i += vectorSize)
             {
-                double angle = (2 * Math.PI * i / PointsPerPolygon) + phase;
-                float radiusVariation = 1.0f + 0.3f * (float)Math.Sin(5 * angle + phase * 2);
-                float r = animatedRadius * radiusVariation;
+                // Load precomputed sin/cos values
+                var sinVec = new Vector<float>(sinTable, i);
+                var cosVec = new Vector<float>(cosTable, i);
+                var sin5Vec = new Vector<float>(sin5Table, i);
+                var cos5Vec = new Vector<float>(cos5Table, i);
 
-                float x = Math.Clamp((float)(centerX + r * Math.Cos(angle)), 0, CanvasWidth - 1);
-                float y = Math.Clamp((float)(centerY + r * Math.Sin(angle)), 0, CanvasHeight - 1);
+                // Rotate by phase: rotatedCos = cos*cosPhase - sin*sinPhase
+                var rotatedCos = cosVec * cosPhase - sinVec * sinPhase;
+                var rotatedSin = sinVec * cosPhase + cosVec * sinPhase;
 
+                // Radius variation: 1 + 0.3 * sin(5*angle + phase2)
+                // sin(a+b) = sin(a)*cos(b) + cos(a)*sin(b)
+                var radiusVar = Vector<float>.One + new Vector<float>(0.3f) *
+                    (sin5Vec * cosPhase2 + cos5Vec * sinPhase2);
+                var r = new Vector<float>(animatedRadius) * radiusVar;
+
+                // Calculate positions
+                var xVec = new Vector<float>(cx) + r * rotatedCos;
+                var yVec = new Vector<float>(cy) + r * rotatedSin;
+
+                // Clamp and store
+                xVec = Vector.Max(Vector<float>.Zero, Vector.Min(xVec, new Vector<float>(CanvasWidth - 1)));
+                yVec = Vector.Max(Vector<float>.Zero, Vector.Min(yVec, new Vector<float>(CanvasHeight - 1)));
+
+                // Store results
+                for (int j = 0; j < vectorSize; j++)
+                {
+                    points[i + j] = new SKPoint(xVec[j], yVec[j]);
+                }
+            }
+
+            // Handle remaining elements
+            for (int i = vectorEnd; i < PointsPerPolygon; i++)
+            {
+                float sin = sinTable[i];
+                float cos = cosTable[i];
+                float rotatedCos = cos * cosPhase - sin * sinPhase;
+                float rotatedSin = sin * cosPhase + cos * sinPhase;
+                float radiusVar = 1f + 0.3f * (sin5Table[i] * cosPhase2 + cos5Table[i] * sinPhase2);
+                float r = animatedRadius * radiusVar;
+
+                float x = MathF.Max(0f, MathF.Min(cx + r * rotatedCos, CanvasWidth - 1));
+                float y = MathF.Max(0f, MathF.Min(cy + r * rotatedSin, CanvasHeight - 1));
                 points[i] = new SKPoint(x, y);
             }
         }
@@ -121,16 +197,16 @@ static async Task StreamStressTestFrames(WebSocket webSocket, CancellationToken 
         // Encode frame using VectorGraphics binary protocol
         int offset = EncodeFrame(buffer, frameId, polygonPoints, colors);
 
+        // Wait for next tick (precise 60 FPS)
+        if (!await timer.WaitForNextTickAsync(ct))
+            break;
+
         // Send frame via WebSocket
         await webSocket.SendAsync(
             new ArraySegment<byte>(buffer, 0, offset),
             WebSocketMessageType.Binary,
             true,
             ct);
-
-        // Wait for next tick (precise 30 FPS)
-        if (!await timer.WaitForNextTickAsync(ct))
-            break;
     }
 }
 

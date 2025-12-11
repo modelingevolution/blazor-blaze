@@ -53,7 +53,7 @@ public class VectorGraphicsDecoder : IFrameDecoder
         _filteredLayers = options.FilteredLayers?.ToHashSet();
     }
 
-    public DecodeResult Decode(ReadOnlySpan<byte> buffer, ICanvas canvas)
+    public DecodeResult Decode(in ReadOnlySpan<byte> buffer, ICanvas canvas)
     {
         if (buffer.Length < 11) // Minimum: FrameType(1) + FrameId(8) + LayerId(1) + ObjectCount(1)
             return DecodeResult.NeedMoreData();

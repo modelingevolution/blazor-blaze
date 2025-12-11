@@ -15,7 +15,7 @@ public interface IFrameDecoder
     /// DecodeResult with frame number if complete, bytes consumed,
     /// or indication that more data is needed.
     /// </returns>
-    DecodeResult Decode(ReadOnlySpan<byte> buffer, ICanvas canvas);
+    DecodeResult Decode(in ReadOnlySpan<byte> buffer, ICanvas canvas);
 
     /// <summary>
     /// Reset decoder state (e.g., clear delta tracking).

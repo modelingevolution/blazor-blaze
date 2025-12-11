@@ -11,8 +11,8 @@
 
 <PageTitle>20K Points Stress Test</PageTitle>
 
-<h1>WebSocket Stress Test - 20,000 Points</h1>
-<p data-testid="stress-description">Stress test with 20K total points streamed over WebSocket. Measures real network streaming performance.</p>
+<h1>WebSocket Stress Test - 20,000 Points @@ 60 FPS</h1>
+<p data-testid="stress-description">Stress test with 20K total points streamed over WebSocket at 60 FPS. Measures real network streaming performance.</p>
 
 <div class="controls mb-3" data-testid="stress-controls">
     <button class="btn btn-success me-2" @onclick="StartStreaming" disabled="@_isStreaming" data-testid="btn-start">
@@ -54,7 +54,7 @@
 <div class="mt-3">
     <h5>Protocol Information</h5>
     <p data-testid="protocol-info">
-        Using VectorGraphics binary protocol over WebSocket. 100 polygons with 200 points each = 20K total points.
+        Using VectorGraphics binary protocol over WebSocket at 60 FPS. 100 polygons with 200 points each = 20K total points.
         Points are delta-encoded with varint+zigzag for efficient transfer.
     </p>
 </div>
