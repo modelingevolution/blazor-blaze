@@ -201,6 +201,12 @@ public class RemoteCanvas(Action<ulong, byte> onBegin, Action<IRenderOp, byte> o
         onPush(renderOp, layerId ?? LayerId);
     }
 
+    public void DrawPolygon(ReadOnlySpan<SKPoint> points, DrawContext? context, byte? layerId = null)
+    {
+        var ctx = context ?? new DrawContext();
+        DrawPolygon(points, ctx.Stroke, ctx.Thickness, layerId);
+    }
+
     public byte LayerId { get; set; } = 0x0;
     public void End(byte? layerId = null) => onEnd(layerId ?? LayerId);
     public void Begin(ulong frameNr, byte? layerId = null) => onBegin(frameNr, layerId ?? LayerId);

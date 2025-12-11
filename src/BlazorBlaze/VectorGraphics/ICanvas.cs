@@ -15,6 +15,9 @@ public interface ICanvas
     // draws a polygon on a layer using SKPoint for direct Skia rendering (no conversion overhead)
     void DrawPolygon(ReadOnlySpan<SKPoint> points, RgbColor? color = null, int width = 1, byte? layerId = null);
 
+    // draws a polygon with full DrawContext support (transforms, stroke, fill)
+    void DrawPolygon(ReadOnlySpan<SKPoint> points, DrawContext? context, byte? layerId = null);
+
     // marks the ends of drawing on a layer
     void End(byte? layerId = null);
 

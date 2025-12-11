@@ -5,7 +5,11 @@ High-performance rendering library for Blazor WebAssembly with three rendering t
 ## Installation
 
 ```xml
-<PackageReference Include="ModelingEvolution.BlazorBlaze" />
+<!-- Client-side (Blazor WASM) -->
+<PackageReference Include="BlazorBlaze" />
+
+<!-- Server-side (ASP.NET Core WebSocket streaming) -->
+<PackageReference Include="BlazorBlaze.Server" />
 ```
 
 ## Rendering Technologies
@@ -15,7 +19,7 @@ High-performance rendering library for Blazor WebAssembly with three rendering t
 Interactive scene graph with draggable controls for building visual editors.
 
 ```csharp
-@using ModelingEvolution.BlazorBlaze
+@using BlazorBlaze
 @using ModelingEvolution.Drawing
 @using SkiaSharp
 
@@ -54,7 +58,7 @@ Interactive scene graph with draggable controls for building visual editors.
 SkiaSharp-based charts for data visualization.
 
 ```csharp
-@using ModelingEvolution.BlazorBlaze.Charts
+@using BlazorBlaze.Charts
 @using SkiaSharp
 @using SkiaSharp.Views.Blazor
 
@@ -90,30 +94,47 @@ SkiaSharp-based charts for data visualization.
 
 High-performance binary streaming for real-time graphics over WebSocket.
 
-**Performance (stress test with 20K polygons @ 30 FPS):**
+**Performance (stress test with 20K polygons @ 60 FPS):**
 - Render time: ~2.5ms per frame
 - Transfer rate: ~1.1 MB/s
 - Smooth, consistent frame delivery
+- Supports transformation matrices (Rotation, Scale, Skew, Offset)
 
-**Server:**
+**Server (using BlazorBlaze.Server):**
 ```csharp
-app.Map("/ws/stream", async context =>
-{
-    var ws = await context.WebSockets.AcceptWebSocketAsync();
-    var stream = new RenderingStream(ws);
+using BlazorBlaze.Server;
+using BlazorBlaze.VectorGraphics;
 
-    while (ws.State == WebSocketState.Open)
+app.UseWebSockets();
+
+// Minimal API-style endpoint with IRemoteCanvas
+app.MapVectorGraphicsEndpoint("/ws/stream", async (IRemoteCanvas canvas, CancellationToken ct) =>
+{
+    var points = new SKPoint[] { /* polygon vertices */ };
+
+    while (!ct.IsCancellationRequested)
     {
-        stream.DrawPolygon(vertices, color);
-        await stream.FlushAsync();
-        await Task.Delay(33); // ~30 FPS
+        canvas.Begin();
+
+        // Draw with transformation support
+        canvas.DrawPolygon(points, new DrawContext
+        {
+            Stroke = new RgbColor(255, 100, 100),
+            Thickness = 2,
+            Offset = new SKPoint(100, 100),    // Translate
+            Rotation = 45f,                     // Degrees
+            Scale = new SKPoint(1.5f, 1.5f)    // Scale
+        });
+
+        await canvas.FlushAsync(ct);
+        await Task.Delay(16, ct); // ~60 FPS
     }
 });
 ```
 
 **Client:**
 ```csharp
-@using ModelingEvolution.BlazorBlaze.VectorGraphics
+@using BlazorBlaze.VectorGraphics
 
 private VectorGraphicsDecoder _decoder = new();
 private ClientWebSocket _ws = new();
@@ -192,9 +213,13 @@ mcp__playwright__browser_console_messages level="error"
 
 ```
 src/
-  ModelingEvolution.BlazorBlaze/     # Main library
+  BlazorBlaze/                        # Main library (WASM-compatible)
     Charts/                           # BarChart, TimeSeriesChart
-    VectorGraphics/                   # RenderingStream, Decoder
+    VectorGraphics/                   # VectorGraphicsEncoder, Decoder, DrawContext
+  BlazorBlaze.Server/                 # Server extensions (ASP.NET Core)
+    IRemoteCanvas                     # Server-side canvas interface
+    WebSocketRemoteCanvas             # WebSocket implementation
+    VectorGraphicsEndpointExtensions  # MapVectorGraphicsEndpoint
 samples/
   SampleApp/                          # Server + WebSocket endpoints
   SampleApp.Client/                   # Blazor WASM client

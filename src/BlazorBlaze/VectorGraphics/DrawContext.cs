@@ -23,4 +23,37 @@ public readonly record struct DrawContext
 
     [ProtoMember(6)]
     public RgbColor? FontColor { get; init; }
+
+    [ProtoMember(7)]
+    public float? Rotation { get; init; }
+
+    [ProtoMember(8)]
+    public SKPoint? Scale { get; init; }
+
+    [ProtoMember(9)]
+    public SKPoint? Skew { get; init; }
+
+    public bool HasTransform => Offset.HasValue || Rotation.HasValue || Scale.HasValue || Skew.HasValue;
+
+    public SKMatrix ToMatrix()
+    {
+        if (!HasTransform)
+            return SKMatrix.Identity;
+
+        var matrix = SKMatrix.Identity;
+
+        if (Scale.HasValue)
+            matrix = matrix.PreConcat(SKMatrix.CreateScale(Scale.Value.X, Scale.Value.Y));
+
+        if (Rotation.HasValue)
+            matrix = matrix.PreConcat(SKMatrix.CreateRotationDegrees(Rotation.Value));
+
+        if (Skew.HasValue)
+            matrix = matrix.PreConcat(SKMatrix.CreateSkew(Skew.Value.X, Skew.Value.Y));
+
+        if (Offset.HasValue)
+            matrix = matrix.PreConcat(SKMatrix.CreateTranslation(Offset.Value.X, Offset.Value.Y));
+
+        return matrix;
+    }
 }

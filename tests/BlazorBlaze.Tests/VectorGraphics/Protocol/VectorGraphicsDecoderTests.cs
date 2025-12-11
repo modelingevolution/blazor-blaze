@@ -304,12 +304,13 @@ public class VectorGraphicsDecoderTests
             lastY = points[i].Y;
         }
 
-        // Context
-        byte contextFlags = 0;
-        if (strokeColor.HasValue) contextFlags |= 0x01;
-        if (thickness.HasValue) contextFlags |= 0x04;
+        // Context (ushort flags - 2 bytes LE)
+        ushort contextFlags = 0;
+        if (strokeColor.HasValue) contextFlags |= 0x0001;
+        if (thickness.HasValue) contextFlags |= 0x0004;
 
-        buffer[offset++] = contextFlags;
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset), contextFlags);
+        offset += 2;
 
         if (strokeColor.HasValue)
         {
@@ -364,9 +365,10 @@ public class VectorGraphicsDecoderTests
         textBytes.CopyTo(buffer.AsSpan(offset));
         offset += textBytes.Length;
 
-        // Context with font size
-        byte contextFlags = 0x08; // HasFontSize
-        buffer[offset++] = contextFlags;
+        // Context with font size (ushort flags - 2 bytes LE)
+        ushort contextFlags = 0x0008; // HasFontSize
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset), contextFlags);
+        offset += 2;
         offset += BinaryEncoding.WriteVarint(buffer.AsSpan(offset), fontSize);
 
         // End marker
@@ -419,6 +421,12 @@ internal class TestCanvas : ICanvas
         CapturedPoints = points.ToArray();
         LastPolygonColor = color;
         LastPolygonWidth = width;
+    }
+
+    public void DrawPolygon(ReadOnlySpan<SKPoint> points, DrawContext? context, byte? layerId = null)
+    {
+        var ctx = context ?? new DrawContext();
+        DrawPolygon(points, ctx.Stroke, ctx.Thickness, layerId);
     }
 
     public void DrawRectangle(System.Drawing.Rectangle rect, RgbColor? color = null, byte? layerId = null)

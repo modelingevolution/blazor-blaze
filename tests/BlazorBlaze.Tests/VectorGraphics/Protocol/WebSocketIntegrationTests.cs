@@ -310,8 +310,9 @@ public class WebSocketIntegrationTests : IAsyncLifetime
             lastY = points[i].Y;
         }
 
-        // Context (no stroke/fill)
-        buffer[offset++] = 0x00;
+        // Context (no stroke/fill) - ushort flags (2 bytes LE)
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset), 0x0000);
+        offset += 2;
 
         // End marker
         buffer[offset++] = 0xFF;
@@ -347,9 +348,10 @@ public class WebSocketIntegrationTests : IAsyncLifetime
         textBytes.CopyTo(buffer.AsSpan(offset));
         offset += textBytes.Length;
 
-        // Context with font size
-        byte contextFlags = 0x08; // HasFontSize
-        buffer[offset++] = contextFlags;
+        // Context with font size - ushort flags (2 bytes LE)
+        ushort contextFlags = 0x0008; // HasFontSize
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset), contextFlags);
+        offset += 2;
         offset += BinaryEncoding.WriteVarint(buffer.AsSpan(offset), fontSize);
 
         // End marker
@@ -395,6 +397,12 @@ internal class WebSocketTestCanvas : ICanvas
         CapturedPoints = points.ToArray();
         LastPolygonColor = color;
         LastPolygonWidth = width;
+    }
+
+    public void DrawPolygon(ReadOnlySpan<SKPoint> points, DrawContext? context, byte? layerId = null)
+    {
+        var ctx = context ?? new DrawContext();
+        DrawPolygon(points, ctx.Stroke, ctx.Thickness, layerId);
     }
 
     public void DrawRectangle(Rectangle rect, RgbColor? color = null, byte? layerId = null) { }

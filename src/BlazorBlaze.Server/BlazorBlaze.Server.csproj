@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>BlazorBlaze.Server</PackageId>
+    <AssemblyName>BlazorBlaze.Server</AssemblyName>
+    <RootNamespace>BlazorBlaze.Server</RootNamespace>
+    <Title>BlazorBlaze Server Extensions</Title>
+    <Description>Server-side extensions for BlazorBlaze including WebSocket streaming endpoints and IRemoteCanvas for server-rendered vector graphics.</Description>
+    <PackageTags>Blazor;SkiaSharp;Canvas;2D;Rendering;WebSocket;Server;Streaming;Graphics</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BlazorBlaze\BlazorBlaze.csproj" />
+  </ItemGroup>
+
+</Project>

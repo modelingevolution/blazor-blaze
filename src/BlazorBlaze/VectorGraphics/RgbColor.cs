@@ -4,6 +4,7 @@ namespace BlazorBlaze.VectorGraphics;
 
 public readonly record struct RgbColor(byte R, byte G, byte B, byte A = 255)
 {
+    public static readonly RgbColor Transparent = new RgbColor(0, 0, 0, 0);
     public static readonly RgbColor White = new RgbColor(255, 255, 255);
     public static readonly RgbColor Black = new RgbColor(0, 0, 0);
     public static readonly RgbColor Red = new RgbColor(255, 0, 0);

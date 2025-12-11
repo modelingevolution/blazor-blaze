@@ -12,7 +12,7 @@
 <PageTitle>20K Points Stress Test</PageTitle>
 
 <h1>WebSocket Stress Test - 20,000 Points @@ 60 FPS</h1>
-<p data-testid="stress-description">Stress test with 20K total points streamed over WebSocket at 60 FPS. Measures real network streaming performance.</p>
+<p data-testid="stress-description">Stress test with 20K total points streamed over WebSocket at 60 FPS using Protocol v2 (multi-layer, stateful context). Measures real network streaming performance.</p>
 
 <div class="controls mb-3" data-testid="stress-controls">
     <button class="btn btn-success me-2" @onclick="StartStreaming" disabled="@_isStreaming" data-testid="btn-start">
@@ -54,14 +54,18 @@
 <div class="mt-3">
     <h5>Protocol Information</h5>
     <p data-testid="protocol-info">
-        Using VectorGraphics binary protocol over WebSocket at 60 FPS. 100 polygons with 200 points each = 20K total points.
-        Points are delta-encoded with varint+zigzag for efficient transfer.
+        Using VectorGraphics Protocol v2 with stateful context and multi-layer support over WebSocket at 60 FPS.
+        100 polygons with 200 points each = 20K total points. Points are delta-encoded with varint+zigzag for efficient transfer.
+        Transforms (Translate, Rotate, Scale) are applied via Save/Restore context operations.
     </p>
 </div>
 
 @code {
+    private const int CanvasWidth = 1200;
+    private const int CanvasHeight = 800;
+
     private SKCanvasView? _canvasView;
-    private IRenderingStream? _stream;
+    private RenderingStreamV2? _stream;
     private bool _isStreaming;
     private System.Diagnostics.Stopwatch _renderStopwatch = new();
 
@@ -73,9 +77,8 @@
 
     protected override void OnInitialized()
     {
-        // Create the rendering stream with VectorGraphics decoder
-        var decoder = new VectorGraphicsDecoder(VectorGraphicsOptions.Default);
-        _stream = new RenderingStream(decoder, LoggerFactory);
+        // Create the rendering stream with V2 protocol decoder
+        _stream = new RenderingStreamV2(CanvasWidth, CanvasHeight, LoggerFactory);
     }
 
     private async Task StartStreaming()
@@ -144,7 +147,7 @@
             return;
         }
 
-        // Render the stream content
+        // Render the stream content (composites all layers)
         _stream.Render(canvas);
 
         // Track FPS statistics

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Text;
 using SkiaSharp;
@@ -36,13 +37,16 @@ public class VectorGraphicsDecoder : IFrameDecoder
     private const byte EndMarker1 = 0xFF;
     private const byte EndMarker2 = 0xFF;
 
-    // Context flags
-    private const byte ContextHasStroke = 0x01;
-    private const byte ContextHasFill = 0x02;
-    private const byte ContextHasThickness = 0x04;
-    private const byte ContextHasFontSize = 0x08;
-    private const byte ContextHasFontColor = 0x10;
-    private const byte ContextHasOffset = 0x20;
+    // Context flags (ushort - 16 bits)
+    private const ushort ContextHasStroke = 0x0001;
+    private const ushort ContextHasFill = 0x0002;
+    private const ushort ContextHasThickness = 0x0004;
+    private const ushort ContextHasFontSize = 0x0008;
+    private const ushort ContextHasFontColor = 0x0010;
+    private const ushort ContextHasOffset = 0x0020;
+    private const ushort ContextHasRotation = 0x0040;
+    private const ushort ContextHasScale = 0x0080;
+    private const ushort ContextHasSkew = 0x0100;
 
     private readonly VectorGraphicsOptions _options;
     private readonly HashSet<int>? _filteredLayers;
@@ -368,14 +372,15 @@ public class VectorGraphicsDecoder : IFrameDecoder
     {
         context = null;
 
-        if (buffer.Length < 1)
+        if (buffer.Length < 2)
             return -1;
 
-        byte flags = buffer[0];
+        // Read ushort flags (2 bytes LE)
+        ushort flags = BinaryPrimitives.ReadUInt16LittleEndian(buffer);
         if (flags == 0)
-            return 1; // No context
+            return 2; // No context, just the flags bytes
 
-        int offset = 1;
+        int offset = 2;
 
         RgbColor? stroke = null;
         RgbColor? fill = null;
@@ -383,6 +388,9 @@ public class VectorGraphicsDecoder : IFrameDecoder
         ushort fontSize = 12;
         RgbColor? fontColor = null;
         SKPoint? contextOffset = null;
+        float? rotation = null;
+        SKPoint? scale = null;
+        SKPoint? skew = null;
 
         // Read stroke color (4 bytes RGBA)
         if ((flags & ContextHasStroke) != 0)
@@ -431,7 +439,7 @@ public class VectorGraphicsDecoder : IFrameDecoder
             offset += 4;
         }
 
-        // Read offset (2 x zigzag varint) - decode directly to SKPoint
+        // Read offset/translate (2 x zigzag varint) - decode directly to SKPoint
         if ((flags & ContextHasOffset) != 0)
         {
             int consumed = BinaryEncoding.ReadSignedVarint(buffer.Slice(offset), out int ox);
@@ -444,7 +452,38 @@ public class VectorGraphicsDecoder : IFrameDecoder
                 return -1;
             offset += consumed;
 
-            contextOffset = new SKPoint(Math.Max(0, ox), Math.Max(0, oy));
+            contextOffset = new SKPoint(ox, oy);
+        }
+
+        // Read rotation (4 bytes float LE, degrees)
+        if ((flags & ContextHasRotation) != 0)
+        {
+            if (buffer.Length - offset < 4)
+                return -1;
+            rotation = BinaryPrimitives.ReadSingleLittleEndian(buffer.Slice(offset));
+            offset += 4;
+        }
+
+        // Read scale (2 x 4 bytes float LE)
+        if ((flags & ContextHasScale) != 0)
+        {
+            if (buffer.Length - offset < 8)
+                return -1;
+            float scaleX = BinaryPrimitives.ReadSingleLittleEndian(buffer.Slice(offset));
+            float scaleY = BinaryPrimitives.ReadSingleLittleEndian(buffer.Slice(offset + 4));
+            scale = new SKPoint(scaleX, scaleY);
+            offset += 8;
+        }
+
+        // Read skew (2 x 4 bytes float LE)
+        if ((flags & ContextHasSkew) != 0)
+        {
+            if (buffer.Length - offset < 8)
+                return -1;
+            float skewX = BinaryPrimitives.ReadSingleLittleEndian(buffer.Slice(offset));
+            float skewY = BinaryPrimitives.ReadSingleLittleEndian(buffer.Slice(offset + 4));
+            skew = new SKPoint(skewX, skewY);
+            offset += 8;
         }
 
         context = new DrawContext
@@ -454,7 +493,10 @@ public class VectorGraphicsDecoder : IFrameDecoder
             Thickness = thickness,
             FontSize = fontSize,
             FontColor = fontColor,
-            Offset = contextOffset
+            Offset = contextOffset,
+            Rotation = rotation,
+            Scale = scale,
+            Skew = skew
         };
 
         return offset;

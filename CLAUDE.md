@@ -27,11 +27,12 @@ Opens at `http://localhost:5100`
 - Demos: `/barchart`, `/timeseries`
 
 ### 3. VectorGraphics (WebSocket Streaming)
-- Namespace: `BlazorBlaze.VectorGraphics`
-- Server: `RenderingStream` wraps WebSocket
+- Client namespace: `BlazorBlaze.VectorGraphics`
+- Server namespace: `BlazorBlaze.Server`
+- Server: `IRemoteCanvas` interface with `MapVectorGraphicsEndpoint` extension
 - Client: `VectorGraphicsDecoder` decodes and renders
-- Binary protocol for high-performance streaming
-- Demo: `/stress` (20K polygons @ 30 FPS)
+- Binary protocol with transformation matrix support (Rotation, Scale, Skew, Offset)
+- Demo: `/stress` (20K polygons @ 60 FPS)
 
 ## Testing with MCP Playwright
 
@@ -63,14 +64,28 @@ _chart.Size = new SKSize(e.Info.Width, e.Info.Height);
 _chart.Render(canvas);
 ```
 
-### WebSocket Streaming
+### WebSocket Streaming (Server)
 ```csharp
-// Server
-var stream = new RenderingStream(websocket);
-stream.DrawPolygon(vertices, color);
-await stream.FlushAsync();
+using BlazorBlaze.Server;
+using BlazorBlaze.VectorGraphics;
 
-// Client
+app.UseWebSockets();
+app.MapVectorGraphicsEndpoint("/ws/stream", async (IRemoteCanvas canvas, CancellationToken ct) =>
+{
+    canvas.Begin();
+    canvas.DrawPolygon(points, new DrawContext
+    {
+        Stroke = new RgbColor(255, 100, 100),
+        Rotation = 45f,          // Degrees
+        Scale = new SKPoint(1.5f, 1.5f),
+        Offset = new SKPoint(100, 100)
+    });
+    await canvas.FlushAsync(ct);
+});
+```
+
+### WebSocket Streaming (Client)
+```csharp
 _decoder.Decode(buffer);
 _decoder.Render(canvas);
 ```
@@ -86,9 +101,13 @@ _decoder.Render(canvas);
 
 ```
 src/
-├── BlazorBlaze/                         # Main library
+├── BlazorBlaze/                         # Main library (WASM-compatible)
 │   ├── Charts/                          # BarChart, TimeSeriesChart
-│   └── VectorGraphics/                  # RenderingStream, Decoder
+│   └── VectorGraphics/                  # Encoder, Decoder, DrawContext
+├── BlazorBlaze.Server/                  # Server extensions (ASP.NET Core)
+│   ├── IRemoteCanvas.cs                 # Server-side canvas interface
+│   ├── WebSocketRemoteCanvas.cs         # WebSocket implementation
+│   └── VectorGraphicsEndpointExtensions.cs  # MapVectorGraphicsEndpoint
 samples/
 ├── SampleApp/                           # Server (WebSocket endpoint)
 └── SampleApp.Client/                    # Blazor WASM client

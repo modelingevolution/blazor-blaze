@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SampleApp.Client\SampleApp.Client.csproj" />
     <ProjectReference Include="..\..\src\BlazorBlaze\BlazorBlaze.csproj" />
+    <ProjectReference Include="..\..\src\BlazorBlaze.Server\BlazorBlaze.Server.csproj" />
   </ItemGroup>
 
 </Project>

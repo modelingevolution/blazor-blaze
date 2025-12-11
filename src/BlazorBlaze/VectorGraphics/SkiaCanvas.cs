@@ -115,6 +115,12 @@ public class SkiaCanvas : ICanvas
         Add(new PolygonRenderOp(pooledArray, points.Length, color ?? RgbColor.Black, (ushort)width, ownsArray: true), layerId);
     }
 
+    public void DrawPolygon(ReadOnlySpan<SKPoint> points, DrawContext? context, byte? layerId = null)
+    {
+        var ctx = context ?? new DrawContext();
+        DrawPolygon(points, ctx.Stroke, ctx.Thickness, layerId);
+    }
+
     // Thread-local SKPath for reuse - avoids native allocation per polygon
     [ThreadStatic]
     private static SKPath? _reusablePath;
