@@ -22,13 +22,13 @@ jobs:
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
     - name: Restore dependencies
-      run: dotnet restore src/ModelingEvolution.BlazorBlaze/ModelingEvolution.BlazorBlaze.csproj
+      run: dotnet restore src/BlazorBlaze/BlazorBlaze.csproj
 
     - name: Build
-      run: dotnet build src/ModelingEvolution.BlazorBlaze/ModelingEvolution.BlazorBlaze.csproj -c Release --no-restore
+      run: dotnet build src/BlazorBlaze/BlazorBlaze.csproj -c Release --no-restore
 
     - name: Pack
-      run: dotnet pack src/ModelingEvolution.BlazorBlaze/ModelingEvolution.BlazorBlaze.csproj -c Release --no-build -o ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+      run: dotnet pack src/BlazorBlaze/BlazorBlaze.csproj -c Release --no-build -o ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
 
     - name: Push to NuGet.org
       run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

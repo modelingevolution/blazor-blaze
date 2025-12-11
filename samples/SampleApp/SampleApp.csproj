@@ -15,7 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SampleApp.Client\SampleApp.Client.csproj" />
-    <ProjectReference Include="..\..\src\ModelingEvolution.BlazorBlaze\ModelingEvolution.BlazorBlaze.csproj" />
+    <ProjectReference Include="..\..\src\BlazorBlaze\BlazorBlaze.csproj" />
   </ItemGroup>
 
 </Project>

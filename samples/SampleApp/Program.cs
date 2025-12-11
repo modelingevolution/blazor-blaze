@@ -1,8 +1,8 @@
 using System.Net.WebSockets;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using ModelingEvolution.BlazorBlaze.VectorGraphics;
-using ModelingEvolution.BlazorBlaze.VectorGraphics.Protocol;
+using BlazorBlaze.VectorGraphics;
+using BlazorBlaze.VectorGraphics.Protocol;
 using SampleApp.Client.Pages;
 using SampleApp.Components;
 using SkiaSharp;

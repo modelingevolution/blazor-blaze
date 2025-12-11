@@ -12,7 +12,7 @@ Opens at `http://localhost:5100`
 ## Three Rendering Technologies
 
 ### 1. BlazorCanvas + BlazeEngine (Scene Graph)
-- Namespace: `ModelingEvolution.BlazorBlaze`
+- Namespace: `BlazorBlaze`
 - Components: `BlazorCanvas`, `BlazeEngine`
 - Controls: `CircleControl`, `RectangleControl`, `PolygonControl`
 - Extension: `control.EnableDrag()` for drag-and-drop
@@ -20,14 +20,14 @@ Opens at `http://localhost:5100`
 - Demo: `/canvas`
 
 ### 2. Charts
-- Namespace: `ModelingEvolution.BlazorBlaze.Charts`
+- Namespace: `BlazorBlaze.Charts`
 - Classes: `BarChart`, `TimeSeriesChart`, `TimeSeriesF`
 - Use `SKCanvasView` from SkiaSharp.Views.Blazor
 - Set `Location` and `Size` properties, then call `Render(canvas)`
 - Demos: `/barchart`, `/timeseries`
 
 ### 3. VectorGraphics (WebSocket Streaming)
-- Namespace: `ModelingEvolution.BlazorBlaze.VectorGraphics`
+- Namespace: `BlazorBlaze.VectorGraphics`
 - Server: `RenderingStream` wraps WebSocket
 - Client: `VectorGraphicsDecoder` decodes and renders
 - Binary protocol for high-performance streaming
@@ -86,10 +86,15 @@ _decoder.Render(canvas);
 
 ```
 src/
-├── ModelingEvolution.BlazorBlaze/      # Main library
+├── BlazorBlaze/                         # Main library
 │   ├── Charts/                          # BarChart, TimeSeriesChart
 │   └── VectorGraphics/                  # RenderingStream, Decoder
 samples/
 ├── SampleApp/                           # Server (WebSocket endpoint)
 └── SampleApp.Client/                    # Blazor WASM client
+tests/
+├── BlazorBlaze.Tests/                   # Unit tests
+└── BlazorBlaze.E2ETests/                # End-to-end tests
+benchmarks/
+└── BlazorBlaze.Benchmarks/              # Performance benchmarks
 ```

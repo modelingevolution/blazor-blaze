@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <PackageId>BlazorBlaze</PackageId>
+    <AssemblyName>BlazorBlaze</AssemblyName>
+    <RootNamespace>BlazorBlaze</RootNamespace>
+    <Title>ModelingEvolution Blaze - 2D Canvas Engine for Blazor</Title>
+    <Description>High-performance 2D canvas engine for Blazor using SkiaSharp. Features include scene graph, hit detection, camera zoom/pan, extensible controls, and reactive data binding.</Description>
+    <PackageTags>Blazor;SkiaSharp;Canvas;2D;Rendering;WebAssembly;WASM;UI;Graphics;Interactive</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp.Views.Blazor" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="ModelingEvolution.Drawing" />
+    <PackageReference Include="ModelingEvolution.Bytes" />
+    <PackageReference Include="System.Reactive" />
+    <PackageReference Include="System.Collections.Immutable" />
+    <PackageReference Include="Nito.AsyncEx" />
+    <PackageReference Include="protobuf-net" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+</Project>
