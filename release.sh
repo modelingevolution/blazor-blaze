@@ -225,8 +225,8 @@ create_release() {
     echo "Next steps:"
     echo "1. Monitor the GitHub Actions workflow: https://github.com/modelingevolution/blazor-blaze/actions"
     echo "2. Verify NuGet package is published to NuGet.org:"
-    echo "   - ModelingEvolution.Blaze $version"
-    echo "3. Check package on NuGet.org: https://www.nuget.org/packages/ModelingEvolution.Blaze"
+    echo "   - ModelingEvolution.BlazorBlaze $version"
+    echo "3. Check package on NuGet.org: https://www.nuget.org/packages/ModelingEvolution.BlazorBlaze"
 
     return 0
 }

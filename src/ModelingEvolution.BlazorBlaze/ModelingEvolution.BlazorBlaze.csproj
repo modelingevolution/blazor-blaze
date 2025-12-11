@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <PackageId>ModelingEvolution.Blaze</PackageId>
+    <PackageId>ModelingEvolution.BlazorBlaze</PackageId>
     <Title>ModelingEvolution Blaze - 2D Canvas Engine for Blazor</Title>
     <Description>High-performance 2D canvas engine for Blazor using SkiaSharp. Features include scene graph, hit detection, camera zoom/pan, extensible controls, and reactive data binding.</Description>
     <PackageTags>Blazor;SkiaSharp;Canvas;2D;Rendering;WebAssembly;WASM;UI;Graphics;Interactive</PackageTags>
