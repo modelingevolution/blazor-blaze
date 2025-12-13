@@ -1,7 +1,7 @@
 using System.Net.WebSockets;
-using Microsoft.Extensions.Logging;
 using BlazorBlaze.ValueTypes;
 using BlazorBlaze.VectorGraphics.Protocol;
+using Microsoft.Extensions.Logging;
 using ModelingEvolution;
 using SkiaSharp;
 
@@ -13,7 +13,7 @@ namespace BlazorBlaze.VectorGraphics;
 /// </summary>
 public class RenderingStreamV2 : IRenderingStream
 {
-    private readonly VectorStreamDecoder _decoder;
+    private readonly IFrameDecoder _decoder;
     private readonly RenderingStage _stage;
     private readonly LayerPool _layerPool;
     private readonly ILogger _logger;
@@ -31,6 +31,28 @@ public class RenderingStreamV2 : IRenderingStream
     private long _currentWindowBytes;
     private readonly object _bytesLock = new();
 
+    /// <summary>
+    /// Creates a RenderingStreamV2 with a custom decoder.
+    /// Use RenderingStreamBuilder for a fluent API.
+    /// </summary>
+    internal RenderingStreamV2(
+        RenderingStage stage,
+        LayerPool layerPool,
+        IFrameDecoder decoder,
+        ILoggerFactory loggerFactory,
+        int maxBufferSize)
+    {
+        _stage = stage;
+        _layerPool = layerPool;
+        _decoder = decoder;
+        _logger = loggerFactory.CreateLogger<RenderingStreamV2>();
+        _maxBufferSize = maxBufferSize;
+    }
+
+    /// <summary>
+    /// Creates a RenderingStreamV2 with the default Protocol V2 decoder.
+    /// For custom decoders, use RenderingStreamBuilder.
+    /// </summary>
     public RenderingStreamV2(
         int width,
         int height,
