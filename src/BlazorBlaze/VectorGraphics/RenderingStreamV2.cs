@@ -41,7 +41,7 @@ internal class SimpleLayerPool : ILayerPool
 /// </summary>
 public class RenderingStreamV2 : IRenderingStream
 {
-    private readonly VectorGraphicsDecoderV2 _decoder;
+    private readonly VectorStreamDecoder _decoder;
     private readonly RenderingStage _stage;
     private readonly SimpleLayerPool _layerPool;
     private readonly ILogger _logger;
@@ -67,7 +67,7 @@ public class RenderingStreamV2 : IRenderingStream
     {
         _layerPool = new SimpleLayerPool(width, height);
         _stage = new RenderingStage(width, height, _layerPool);
-        _decoder = new VectorGraphicsDecoderV2(_stage);
+        _decoder = new VectorStreamDecoder(_stage);
         _logger = loggerFactory.CreateLogger<RenderingStreamV2>();
         _maxBufferSize = maxBufferSize;
     }
@@ -246,14 +246,14 @@ public class RenderingStreamV2 : IRenderingStream
         // Render current frame - iterate through layer slots in order
         lock (_renderLock)
         {
-            if (_rendererFrame != null)
+            if (_rendererFrame.HasValue)
             {
-                var frame = _rendererFrame.Value;
+                var frame = _rendererFrame.GetValueOrDefault();
                 for (byte i = 0; i < 16; i++)
                 {
                     var layer = frame[i];
-                    if (layer is { } l)
-                        l.Value.DrawTo(canvas);
+                    if (!layer.IsEmpty)
+                        layer.Value.DrawTo(canvas);
                 }
             }
         }

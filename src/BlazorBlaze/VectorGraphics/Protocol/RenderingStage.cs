@@ -87,8 +87,12 @@ public class RenderingStage : IStage, IDisposable
         _prevFrame = new RefArray<Lease<ILayer>>(builder.MoveToImmutable());
 
         _frameLock.Enter();
-        _displayFrame = _prevFrame;
+        _displayFrame.Dispose();
+        if (_prevFrame.TryCopy(out var tmp))
+            _displayFrame = tmp!.Value;
         _frameLock.Exit();
+
+        Array.Clear(_workingLayers);
     }
 
     // --- Renderer Thread API ---

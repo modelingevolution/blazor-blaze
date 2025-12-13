@@ -9,13 +9,13 @@ namespace ModelingEvolution.BlazorBlaze.Tests.VectorGraphics.Protocol;
 
 public class VectorGraphicsDecoderV2Tests
 {
-    private readonly VectorGraphicsDecoderV2 _decoder;
+    private readonly VectorStreamDecoder _decoder;
     private readonly TestStage _stage;
 
     public VectorGraphicsDecoderV2Tests()
     {
         _stage = new TestStage();
-        _decoder = new VectorGraphicsDecoderV2(_stage);
+        _decoder = new VectorStreamDecoder(_stage);
     }
 
     #region Message Header Tests

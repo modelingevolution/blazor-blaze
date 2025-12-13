@@ -97,6 +97,8 @@ public struct RefArray<T> : IDisposable where T : IDisposable
     /// </summary>
     public int Length => _array.IsDefault ? 0 : _array.Length;
 
+  
+
     /// <summary>
     /// Atomic copy - increments ref count on all items.
     /// </summary>

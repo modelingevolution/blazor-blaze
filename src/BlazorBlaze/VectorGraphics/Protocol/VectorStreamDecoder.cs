@@ -141,7 +141,7 @@ public class LayerContext
 /// <summary>
 /// Protocol v2 decoder for stateful canvas API with multi-layer support.
 /// </summary>
-public class VectorGraphicsDecoderV2(IStage stage)
+public class VectorStreamDecoder(IStage stage)
 {
     private const int MinMessageSize = 9 + 2; // Header (9) + EndMarker (2)
 
