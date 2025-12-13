@@ -2,6 +2,8 @@
 
 High-performance rendering library for Blazor WebAssembly with three rendering technologies.
 
+[![NuGet](https://img.shields.io/nuget/v/BlazorBlaze.svg)](https://www.nuget.org/packages/BlazorBlaze)
+
 ## Installation
 
 ```xml
@@ -30,7 +32,7 @@ Interactive scene graph with draggable controls for building visual editors.
 
     protected override void OnInitialized()
     {
-        // Circle
+        // Circle with drag support
         var circle = new CircleControl(new SKPoint(100, 100), 50);
         circle.Fill = SKColors.Red;
         circle.EnableDrag();
@@ -94,37 +96,52 @@ SkiaSharp-based charts for data visualization.
 
 High-performance binary streaming for real-time graphics over WebSocket.
 
-**Performance (stress test with 20K polygons @ 60 FPS):**
+**Protocol v2 Features:**
+- Multi-layer rendering with z-ordering (16 layers)
+- Stateful context (stroke, fill, transforms persist across draw calls)
+- Lock-free rendering with layer pooling
+- Delta-encoded points with varint+zigzag compression
+- Save/Restore for hierarchical transforms
+
+**Performance (stress test with 20K points @ 60 FPS):**
 - Render time: ~2.5ms per frame
 - Transfer rate: ~1.1 MB/s
-- Smooth, consistent frame delivery
-- Supports transformation matrices (Rotation, Scale, Skew, Offset)
+- Zero-allocation rendering path
 
-**Server (using BlazorBlaze.Server):**
+#### Server (Protocol v2 - Recommended)
+
 ```csharp
 using BlazorBlaze.Server;
 using BlazorBlaze.VectorGraphics;
 
 app.UseWebSockets();
 
-// Minimal API-style endpoint with IRemoteCanvas
-app.MapVectorGraphicsEndpoint("/ws/stream", async (IRemoteCanvas canvas, CancellationToken ct) =>
+app.MapVectorGraphicsEndpointV2("/ws/stream", async (IRemoteCanvasV2 canvas, CancellationToken ct) =>
 {
     var points = new SKPoint[] { /* polygon vertices */ };
 
     while (!ct.IsCancellationRequested)
     {
-        canvas.Begin();
+        canvas.BeginFrame();
 
-        // Draw with transformation support
-        canvas.DrawPolygon(points, new DrawContext
-        {
-            Stroke = new RgbColor(255, 100, 100),
-            Thickness = 2,
-            Offset = new SKPoint(100, 100),    // Translate
-            Rotation = 45f,                     // Degrees
-            Scale = new SKPoint(1.5f, 1.5f)    // Scale
-        });
+        // Layer 0 - Background elements (stateful context)
+        var bg = canvas.Layer(0);
+        bg.SetStroke(new RgbColor(100, 100, 100));
+        bg.SetThickness(1);
+        bg.DrawRectangle(0, 0, 800, 600);
+
+        // Layer 1 - Animated content with transforms
+        var layer = canvas.Layer(1);
+        layer.SetStroke(new RgbColor(255, 100, 100));
+        layer.SetThickness(2);
+        layer.Save();
+        layer.Translate(400, 300);
+        layer.Rotate(angle);
+        layer.DrawPolygon(points);
+        layer.Restore();
+
+        // Layer 2 - Static overlay (Remain = no update)
+        canvas.Layer(2).Remain();
 
         await canvas.FlushAsync(ct);
         await Task.Delay(16, ct); // ~60 FPS
@@ -132,55 +149,67 @@ app.MapVectorGraphicsEndpoint("/ws/stream", async (IRemoteCanvas canvas, Cancell
 });
 ```
 
-**Client:**
+#### Client (Protocol v2)
+
 ```csharp
 @using BlazorBlaze.VectorGraphics
+@inject ILoggerFactory LoggerFactory
 
-private VectorGraphicsDecoder _decoder = new();
-private ClientWebSocket _ws = new();
+<SKCanvasView @ref="_canvasView" OnPaintSurface="OnPaintSurface" EnableRenderLoop="true" />
 
-// Connect and receive
-await _ws.ConnectAsync(new Uri("ws://localhost:5100/ws/stream"), CancellationToken.None);
-var result = await _ws.ReceiveAsync(buffer, token);
-_decoder.Decode(buffer.Slice(0, result.Count));
+@code {
+    private RenderingStreamV2? _stream;
+    private SKCanvasView? _canvasView;
 
-// Render
-_decoder.Render(canvas);
+    protected override void OnInitialized()
+    {
+        _stream = new RenderingStreamV2(1200, 800, LoggerFactory);
+    }
+
+    private async Task Connect()
+    {
+        var uri = new Uri("ws://localhost:5100/ws/stream");
+        await _stream!.ConnectAsync(uri);
+    }
+
+    private void OnPaintSurface(SKPaintSurfaceEventArgs e)
+    {
+        var canvas = e.Surface.Canvas;
+        canvas.Clear(SKColors.Black);
+        _stream?.Render(canvas);  // Lock-free, composites all layers
+    }
+
+    // Pool statistics available for monitoring
+    // _stream.PoolInUse, _stream.PoolCached, _stream.PoolTotalCreated
+}
+```
+
+#### Server (Protocol v1 - Simple)
+
+```csharp
+app.MapVectorGraphicsEndpoint("/ws/simple", async (IRemoteCanvas canvas, CancellationToken ct) =>
+{
+    canvas.Begin();
+    canvas.DrawPolygon(points, new DrawContext
+    {
+        Stroke = new RgbColor(255, 100, 100),
+        Thickness = 2,
+        Offset = new SKPoint(100, 100),
+        Rotation = 45f,
+        Scale = new SKPoint(1.5f, 1.5f)
+    });
+    await canvas.FlushAsync(ct);
+});
 ```
 
 ## Running the Sample App
 
-### Quick Start (Recommended)
+### Quick Start
 
 ```bash
 cd samples/SampleApp
 ./run.sh
 ```
-
-This builds in Release mode with AOT compilation and starts the server in the background.
-
-**IMPORTANT: Do NOT use `dotnet publish` or `dotnet run` directly!** Always use `./run.sh` - it handles cleaning, building, and starting the server correctly.
-
-### Manual Clean (if needed)
-
-If you encounter integrity hash errors or need a fresh build:
-
-```bash
-cd samples/SampleApp
-
-# Kill any existing server
-fuser -k 5100/tcp 2>/dev/null || true
-
-# Clean everything
-dotnet clean
-rm -rf bin obj publish
-rm -rf ../SampleApp.Client/bin ../SampleApp.Client/obj
-
-# Then run the script
-./run.sh
-```
-
-AOT (Ahead-of-Time) compilation significantly improves runtime performance for compute-intensive operations like the stress test (20K polygons @ 30 FPS). The `run.sh` script handles this automatically.
 
 Opens at http://localhost:5100
 
@@ -188,26 +217,49 @@ Demo pages:
 - `/canvas` - BlazorCanvas with draggable shapes
 - `/barchart` - Bar chart demo
 - `/timeseries` - Time series chart with live updates
-- `/stress` - WebSocket streaming 20K polygons @ 30 FPS
+- `/stress` - WebSocket streaming 20K points @ 60 FPS (Protocol v2)
 
-## Testing with MCP Playwright
+### Manual Build
+
+```bash
+# Clean build
+cd samples/SampleApp
+dotnet clean
+rm -rf bin obj publish
+rm -rf ../SampleApp.Client/bin ../SampleApp.Client/obj
+./run.sh
+```
+
+## Architecture
+
+### VectorGraphics Protocol v2 Internals
 
 ```
-# Navigate to app
-mcp__playwright__browser_navigate url="http://localhost:5100"
+Server Side:
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────┐
+│ IRemoteCanvasV2 │───>│ VectorEncoderV2  │───>│  WebSocket  │
+│   ILayerCanvas  │    │ (binary protocol)│    │   (send)    │
+└─────────────────┘    └──────────────────┘    └─────────────┘
 
-# Get page structure
-mcp__playwright__browser_snapshot
-
-# Click navigation
-mcp__playwright__browser_click element="Canvas Demo" ref="[ref]"
-
-# Take screenshot
-mcp__playwright__browser_take_screenshot
-
-# Check for errors
-mcp__playwright__browser_console_messages level="error"
+Client Side:
+┌─────────────┐    ┌───────────────────┐    ┌────────────────┐    ┌───────────┐
+│  WebSocket  │───>│ VectorStreamDecoder│───>│ RenderingStage │───>│ LayerPool │
+│  (receive)  │    │ (parse + decode)   │    │ (frame mgmt)   │    │ (recycle) │
+└─────────────┘    └───────────────────┘    └────────────────┘    └───────────┘
+                                                     │
+                                                     v
+                                            ┌────────────────┐
+                                            │ RenderingStreamV2│
+                                            │ (lock-free render)│
+                                            └────────────────┘
 ```
+
+**Key Components:**
+
+- `LayerPool` - Thread-safe pool of `LayerCanvas` instances using `ConcurrentBag`
+- `RenderingStage` - Manages frame lifecycle with lock-free consumer access
+- `Ref<T>` / `RefArray<T>` - Reference-counted smart pointers for safe frame sharing
+- `Lease<T>` - Pool return wrapper, returns layer to pool on dispose
 
 ## Project Structure
 
@@ -215,14 +267,19 @@ mcp__playwright__browser_console_messages level="error"
 src/
   BlazorBlaze/                        # Main library (WASM-compatible)
     Charts/                           # BarChart, TimeSeriesChart
-    VectorGraphics/                   # VectorGraphicsEncoder, Decoder, DrawContext
+    VectorGraphics/                   # Streaming, Decoder, RenderingStream
+      Protocol/                       # IStage, LayerPool, LayerCanvas
+    ValueTypes/                       # Ref<T>, RefArray<T>, Lease<T>
   BlazorBlaze.Server/                 # Server extensions (ASP.NET Core)
-    IRemoteCanvas                     # Server-side canvas interface
-    WebSocketRemoteCanvas             # WebSocket implementation
-    VectorGraphicsEndpointExtensions  # MapVectorGraphicsEndpoint
+    IRemoteCanvasV2                   # Multi-layer canvas interface
+    VectorEncoderV2                   # Binary protocol encoder
 samples/
   SampleApp/                          # Server + WebSocket endpoints
   SampleApp.Client/                   # Blazor WASM client
+tests/
+  BlazorBlaze.Tests/                  # Unit tests (177 tests)
+benchmarks/
+  BlazorBlaze.Benchmarks/             # Performance benchmarks
 ```
 
 ## Dependencies
@@ -231,3 +288,7 @@ samples/
 - SkiaSharp
 - SkiaSharp.Views.Blazor
 - ModelingEvolution.Drawing
+
+## License
+
+MIT

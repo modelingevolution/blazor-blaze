@@ -8,34 +8,6 @@ using SkiaSharp;
 namespace BlazorBlaze.VectorGraphics;
 
 /// <summary>
-/// Simple layer pool that creates new layers on demand.
-/// For production, this could be enhanced with actual pooling.
-/// </summary>
-internal class SimpleLayerPool : ILayerPool
-{
-    private readonly int _width;
-    private readonly int _height;
-
-    public SimpleLayerPool(int width, int height)
-    {
-        _width = width;
-        _height = height;
-    }
-
-    public Lease<ILayer> Rent(byte layerId)
-    {
-        var layer = new LayerCanvas(_width, _height, layerId);
-        return new Lease<ILayer>(layer, Return);
-    }
-
-    private void Return(ILayer layer)
-    {
-        // For now, just dispose - a real pool would recycle
-        layer.Dispose();
-    }
-}
-
-/// <summary>
 /// Protocol v2 rendering stream that handles WebSocket connection and decoding
 /// with multi-layer support and stateful context management.
 /// </summary>
@@ -43,7 +15,7 @@ public class RenderingStreamV2 : IRenderingStream
 {
     private readonly VectorStreamDecoder _decoder;
     private readonly RenderingStage _stage;
-    private readonly SimpleLayerPool _layerPool;
+    private readonly LayerPool _layerPool;
     private readonly ILogger _logger;
     private readonly int _maxBufferSize;
     private ClientWebSocket? _socket;
@@ -65,7 +37,7 @@ public class RenderingStreamV2 : IRenderingStream
         ILoggerFactory loggerFactory,
         int maxBufferSize = 8 * 1024 * 1024)
     {
-        _layerPool = new SimpleLayerPool(width, height);
+        _layerPool = new LayerPool(width, height);
         _stage = new RenderingStage(width, height, _layerPool);
         _decoder = new VectorStreamDecoder(_stage);
         _logger = loggerFactory.CreateLogger<RenderingStreamV2>();
@@ -77,6 +49,21 @@ public class RenderingStreamV2 : IRenderingStream
     public float Fps { get; private set; }
     public string? Error { get; private set; }
     public Bytes TransferRate { get; private set; }
+
+    /// <summary>
+    /// Number of layers currently in use (rented from pool).
+    /// </summary>
+    public int PoolInUse => _layerPool.InUseCount;
+
+    /// <summary>
+    /// Number of layers cached in the pool (available for reuse).
+    /// </summary>
+    public int PoolCached => _layerPool.CachedCount;
+
+    /// <summary>
+    /// Total number of layers created by the pool.
+    /// </summary>
+    public int PoolTotalCreated => _layerPool.TotalCreated;
 
     public async Task ConnectAsync(Uri uri, CancellationToken ct = default)
     {
@@ -272,5 +259,6 @@ public class RenderingStreamV2 : IRenderingStream
         }
 
         _stage.Dispose();
+        _layerPool.Dispose();
     }
 }

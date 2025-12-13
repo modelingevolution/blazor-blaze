@@ -40,6 +40,12 @@
     <span>Render Time: <strong data-testid="render-time">@_lastRenderTimeMs.ToString("F2") ms</strong></span>
 </div>
 
+<div class="stats mb-3 p-2 bg-info text-dark rounded" data-testid="pool-stats">
+    <span class="me-3">Pool In Use: <strong data-testid="pool-in-use">@(_stream?.PoolInUse ?? 0)</strong></span>
+    <span class="me-3">Pool Cached: <strong data-testid="pool-cached">@(_stream?.PoolCached ?? 0)</strong></span>
+    <span>Pool Total Created: <strong data-testid="pool-total">@(_stream?.PoolTotalCreated ?? 0)</strong></span>
+</div>
+
 @if (!string.IsNullOrEmpty(_stream?.Error))
 {
     <div class="alert alert-danger" data-testid="error-message">
