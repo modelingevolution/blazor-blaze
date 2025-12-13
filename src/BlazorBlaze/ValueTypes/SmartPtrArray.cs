@@ -6,7 +6,7 @@ namespace BlazorBlaze.ValueTypes;
 public struct SpinLock
 {
     private int _locked; // 0 = unlocked, 1 = locked
-
+    
     public void Enter()
     {
         while (Interlocked.CompareExchange(ref _locked, 1, 0) != 0)
@@ -23,8 +23,29 @@ public struct SpinLock
 
 /// <summary>
 /// Immutable array of ref-counted items.
-/// Thread-safe via immutability - create new instance for modifications.
-/// DO NOT CHANGE THE FUCKING INTERFACE, EVERHTING NEED TO BE AUTHORIZED!
+///
+/// DESIGN DECISIONS - DO NOT CHANGE WITHOUT AUTHORIZATION:
+///
+/// 1. THIS IS A STRUCT BY DESIGN - NOT A CLASS!
+///    - You CANNOT assign RefArray to a temporary variable
+///    - You CANNOT pass it by value casually
+///    - Struct copy = broken ref counting. This is INTENTIONAL to force correct usage.
+///
+/// 2. USE TryCopy() TO GET A NEW INSTANCE
+///    - TryCopy increments ref counts on all Ref&lt;T&gt; items
+///    - Returns a new RefArray pointing to the same ImmutableArray
+///    - This is the ONLY correct way to "copy" a RefArray
+///
+/// 3. SpinLock IS PER-INSTANCE BY DESIGN
+///    - Each RefArray instance has its own SpinLock
+///    - This is fine because Ref&lt;T&gt; handles its own thread-safety via Interlocked
+///    - The SpinLock protects the _disposed flag and iteration within ONE instance
+///
+/// 4. DO NOT CHANGE TO CLASS - it breaks the design that prevents casual copying
+///
+/// 5. DO NOT ADD ROLLBACK LOGIC - keep it simple
+///
+/// 6. DO NOT COPY THE ARRAY IN TryCopy - just increment ref counts
 /// </summary>
 public struct RefArray<T> : IDisposable where T : class, IDisposable
 {
@@ -42,7 +63,7 @@ public struct RefArray<T> : IDisposable where T : class, IDisposable
     /// <summary>
     /// Get the underlying immutable array.
     /// </summary>
-    internal ImmutableArray<Ref<T>> Value => _array;
+    internal ImmutableArray<Ref<T>?> Value => _array;
 
     /// <summary>
     /// Get value at index. Returns null if array is default or index out of range.

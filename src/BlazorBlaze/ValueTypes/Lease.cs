@@ -11,7 +11,7 @@ namespace BlazorBlaze.ValueTypes;
 /// - Wrap in Ref&lt;Lease&lt;T&gt;&gt; for reference counting
 /// - When all refs released, Lease.Dispose() returns item to pool
 /// </summary>
-public sealed class Lease<T> : IDisposable where T : class
+public struct Lease<T> : IDisposable where T : class
 {
     private readonly T _value;
     private readonly Action<T> _returnToPool;
