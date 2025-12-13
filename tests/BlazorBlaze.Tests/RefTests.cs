@@ -22,6 +22,42 @@ public class RefTests
         public void Dispose() => Interlocked.Increment(ref _disposeCount);
     }
 
+    #region Helper Methods
+
+    private static RefArray<T> CreateRefArray<T>(params Ref<T>?[] refs) where T : IDisposable
+    {
+        var builder = ImmutableArray.CreateBuilder<Ref<T>?>(refs.Length);
+        foreach (var r in refs)
+            builder.Add(r);
+        return new RefArray<T>(builder.MoveToImmutable());
+    }
+
+    /// <summary>
+    /// Disposes a nullable RefArray safely using GetValueOrDefault to avoid
+    /// shadowing issues with the internal Value property.
+    /// </summary>
+    private static void DisposeArray<T>(ref RefArray<T>? array) where T : IDisposable
+    {
+        if (array.HasValue)
+        {
+            var arr = array.GetValueOrDefault();
+            arr.Dispose();
+            array = null;
+        }
+    }
+
+    /// <summary>
+    /// Gets value at index from nullable RefArray.
+    /// </summary>
+    private static T? GetValue<T>(RefArray<T>? array, int index) where T : IDisposable
+    {
+        if (!array.HasValue) return default;
+        var arr = array.GetValueOrDefault();
+        return arr[index];
+    }
+
+    #endregion
+
     #region Ref Basic Tests
 
     [Fact]
@@ -82,41 +118,27 @@ public class RefTests
         copy.Should().BeNull();
     }
 
-    [Fact]
-    public void Ref_WithReturnToPool_CallsCallbackInsteadOfDispose()
-    {
-        var bitmap = new MockBitmap(1);
-        MockBitmap? returnedBitmap = null;
-
-        var r = new Ref<MockBitmap>(bitmap, b => returnedBitmap = b);
-        r.Dispose();
-
-        returnedBitmap.Should().BeSameAs(bitmap);
-        bitmap.IsDisposed.Should().BeFalse("returnToPool callback was used instead");
-    }
-
     #endregion
 
-    #region RefArray Basic Tests (Bucket Design)
+    #region RefArray Basic Tests (Immutable Design)
 
     [Fact]
     public void RefArray_TryCopy_CreatesIndependentCopy()
     {
         var bitmap = new MockBitmap(1);
         var originalRef = new Ref<MockBitmap>(bitmap);
-        var array1 = new RefArray<MockBitmap>();
-        array1.Set(0, originalRef);
+        var array1 = CreateRefArray(originalRef);
 
         array1.TryCopy(out var array2).Should().BeTrue();
 
         array2.Should().NotBeNull();
-        array2![0].Should().BeSameAs(bitmap);
+        GetValue(array2, 0).Should().BeSameAs(bitmap);
         originalRef.RefCount.Should().Be(2);
 
         array1.Dispose();
         bitmap.IsDisposed.Should().BeFalse("array2 still holds reference");
 
-        array2.Dispose();
+        DisposeArray(ref array2);
         bitmap.IsDisposed.Should().BeTrue("all references released");
     }
 
@@ -124,9 +146,8 @@ public class RefTests
     public void RefArray_Dispose_ReleasesAllSlots()
     {
         var bitmaps = Enumerable.Range(0, 5).Select(i => new MockBitmap(i)).ToList();
-        var array = new RefArray<MockBitmap>();
-        for (byte i = 0; i < bitmaps.Count; i++)
-            array.Set(i, new Ref<MockBitmap>(bitmaps[i]));
+        var refs = bitmaps.Select(b => new Ref<MockBitmap>(b)).Cast<Ref<MockBitmap>?>().ToArray();
+        var array = CreateRefArray(refs);
 
         array.Dispose();
 
@@ -137,8 +158,7 @@ public class RefTests
     public void RefArray_TryCopy_ReturnsFalseAfterDispose()
     {
         var bitmap = new MockBitmap(0);
-        var array = new RefArray<MockBitmap>();
-        array.Set(0, new Ref<MockBitmap>(bitmap));
+        var array = CreateRefArray(new Ref<MockBitmap>(bitmap));
 
         array.Dispose();
 
@@ -150,8 +170,7 @@ public class RefTests
     public void RefArray_Dispose_IsIdempotent()
     {
         var bitmap = new MockBitmap(0);
-        var array = new RefArray<MockBitmap>();
-        array.Set(0, new Ref<MockBitmap>(bitmap));
+        var array = CreateRefArray(new Ref<MockBitmap>(bitmap));
 
         array.Dispose();
         array.Dispose();
@@ -165,13 +184,39 @@ public class RefTests
     {
         var bitmap = new MockBitmap(1);
         var originalRef = new Ref<MockBitmap>(bitmap);
-        var array = new RefArray<MockBitmap>();
-        array.Set(0, originalRef);
+        var array = CreateRefArray(originalRef);
 
         var retrievedRef = array.GetRef(0);
 
         retrievedRef.Should().BeSameAs(originalRef);
         array.Dispose();
+    }
+
+    [Fact]
+    public void RefArray_Indexer_ReturnsValue()
+    {
+        var bitmap = new MockBitmap(1);
+        var array = CreateRefArray(new Ref<MockBitmap>(bitmap));
+
+        var value = array[0];
+
+        value.Should().BeSameAs(bitmap);
+        array.Dispose();
+    }
+
+    [Fact]
+    public void RefArray_WithNullSlots_HandlesCorrectly()
+    {
+        var bitmap = new MockBitmap(1);
+        var array = CreateRefArray<MockBitmap>(null, new Ref<MockBitmap>(bitmap), null);
+
+        array.GetRef(0).Should().BeNull();
+        array.GetRef(1).Should().NotBeNull();
+        array.GetRef(2).Should().BeNull();
+        array[1].Should().BeSameAs(bitmap);
+
+        array.Dispose();
+        bitmap.IsDisposed.Should().BeTrue();
     }
 
     #endregion
@@ -230,9 +275,8 @@ public class RefTests
         for (int iter = 0; iter < iterations; iter++)
         {
             var bitmaps = Enumerable.Range(0, 4).Select(j => new MockBitmap(iter * 100 + j)).ToList();
-            var array = new RefArray<MockBitmap>();
-            for (byte i = 0; i < bitmaps.Count; i++)
-                array.Set(i, new Ref<MockBitmap>(bitmaps[i]));
+            var refs = bitmaps.Select(b => new Ref<MockBitmap>(b)).Cast<Ref<MockBitmap>?>().ToArray();
+            var array = CreateRefArray(refs);
 
             var barrier = new Barrier(copyThreads + 1);
             var copies = new RefArray<MockBitmap>?[copyThreads];
@@ -270,16 +314,17 @@ public class RefTests
                     }
 
                     // Check that all 4 slots have values
-                    for (byte j = 0; j < bitmaps.Count; j++)
+                    for (int j = 0; j < bitmaps.Count; j++)
                     {
-                        var value = copy[j];
+                        var value = GetValue(copy, j);
                         if (value == null)
                             errors.Add($"Iter {iter}, Thread {t}: Layer {j} value is null");
                         else if (value.Id != bitmaps[j].Id)
                             errors.Add($"Iter {iter}, Thread {t}: Layer {j} wrong value");
                     }
 
-                    copy.Dispose();
+                    DisposeArray(ref copy);
+                    copies[t] = null;
                 }
             }
 
@@ -343,12 +388,16 @@ public class RefTests
         r.RefCount.Should().Be(2);
 
         r.Dispose();
+        
         returnedItem.Should().BeNull("still has one reference");
         lease.IsDisposed.Should().BeFalse();
 
         r2!.Dispose();
         returnedItem.Should().BeSameAs(bitmap, "last ref released, returned to pool");
-        lease.IsDisposed.Should().BeTrue();
+        
+        lease.IsDisposed.Should().BeFalse(); // this lease had been not disposed.
+        r2.Value.IsDisposed.Should().BeTrue("lease disposed");
+
     }
 
     [Fact]
@@ -371,17 +420,21 @@ public class RefTests
         var layer0 = new Ref<Lease<MockBitmap>>(new Lease<MockBitmap>(RentBitmap(0), ReturnBitmap));
         var layer1 = new Ref<Lease<MockBitmap>>(new Lease<MockBitmap>(RentBitmap(1), ReturnBitmap));
         var layer2 = new Ref<Lease<MockBitmap>>(new Lease<MockBitmap>(RentBitmap(2), ReturnBitmap));
-        var frame1 = new RefArray<Lease<MockBitmap>>();
-        frame1.Set(0, layer0);
-        frame1.Set(1, layer1);
-        frame1.Set(2, layer2);
+
+        var builder1 = ImmutableArray.CreateBuilder<Ref<Lease<MockBitmap>>?>(3);
+        builder1.Add(layer0);
+        builder1.Add(layer1);
+        builder1.Add(layer2);
+        var frame1 = new RefArray<Lease<MockBitmap>>(builder1.MoveToImmutable());
 
         // Frame 2: Layer 0 changes, Layer 1 remains, Layer 2 removed
         var newLayer0 = new Ref<Lease<MockBitmap>>(new Lease<MockBitmap>(RentBitmap(10), ReturnBitmap));
         layer1.TryCopy(out var layer1Copy);  // Remain pattern - increment ref count
-        var frame2 = new RefArray<Lease<MockBitmap>>();
-        frame2.Set(0, newLayer0);
-        frame2.Set(1, layer1Copy);
+
+        var builder2 = ImmutableArray.CreateBuilder<Ref<Lease<MockBitmap>>?>(2);
+        builder2.Add(newLayer0);
+        builder2.Add(layer1Copy);
+        var frame2 = new RefArray<Lease<MockBitmap>>(builder2.MoveToImmutable());
 
         // Dispose frame1
         frame1.Dispose();
@@ -403,33 +456,6 @@ public class RefTests
 
         // None of the bitmaps should be disposed (pool can reuse them)
         bitmaps.Should().OnlyContain(b => !b.IsDisposed);
-    }
-
-    // Pool interface implementation
-    private sealed class TestPool : IPool<MockBitmap>
-    {
-        public static readonly List<MockBitmap> ReturnedItems = new();
-
-        public static void Return(MockBitmap item) => ReturnedItems.Add(item);
-
-        public static void Clear() => ReturnedItems.Clear();
-    }
-
-    [Fact]
-    public void Lease_WithStaticPool_ReturnsViaStaticMethod()
-    {
-        TestPool.Clear();
-
-        var bitmap = new MockBitmap(42);
-        var lease = new Lease<TestPool, MockBitmap>(bitmap);
-
-        lease.Value.Should().BeSameAs(bitmap);
-        lease.IsDisposed.Should().BeFalse();
-
-        lease.Dispose();
-
-        lease.IsDisposed.Should().BeTrue();
-        TestPool.ReturnedItems.Should().ContainSingle().Which.Should().BeSameAs(bitmap);
     }
 
     #endregion

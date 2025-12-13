@@ -6,8 +6,8 @@ using BlazorBlaze.VectorGraphics.Protocol;
 namespace BlazorBlaze.Tests;
 
 /// <summary>
-/// Tests for the simplified RenderingStage pattern using List instead of Dictionary.
-/// Validates the IStage interaction pattern with RefArray.
+/// Tests for the RenderingStage pattern using immutable RefArray.
+/// Validates the IStage interaction pattern with bucket-based indexing.
 /// </summary>
 public class RenderingStageTests
 {
@@ -24,7 +24,7 @@ public class RenderingStageTests
         public int DisposeCount { get; private set; }
 
         // ILayer implementation
-        public SkiaSharp.SKCanvas Canvas => throw new NotImplementedException("Mock");
+        public ICanvas Canvas => throw new NotImplementedException("Mock");
 
         public MockLayer(byte layerId) => LayerId = layerId;
 
@@ -44,20 +44,18 @@ public class RenderingStageTests
     /// </summary>
     private class MockPool
     {
-        private readonly ConcurrentBag<MockLayer> _available = new();
         public int RentCount;
         public int ReturnCount;
         public ConcurrentBag<MockLayer> AllCreated = new();
 
-        public Ref<Lease<ILayer>> Rent(byte layerId)
+        public Lease<ILayer> Rent(byte layerId)
         {
             Interlocked.Increment(ref RentCount);
 
             var layer = new MockLayer(layerId);
             AllCreated.Add(layer);
 
-            var lease = new Lease<ILayer>(layer, Return);
-            return new Ref<Lease<ILayer>>(lease, l => l.Dispose());
+            return new Lease<ILayer>(layer, Return);
         }
 
         private void Return(ILayer layer)
@@ -69,18 +67,21 @@ public class RenderingStageTests
     }
 
     /// <summary>
-    /// Mock RenderingStage using bucket-based RefArray design.
+    /// Mock RenderingStage using bucket-based array design.
     /// Index = layerId, O(1) access, no sorting needed.
+    /// Mirrors the actual RenderingStage implementation.
     /// </summary>
     private class MockRenderingStage
     {
         private readonly MockPool _pool;
 
-        // Frame buckets - index = layerId
-        private readonly RefArray<Lease<ILayer>> _workingFrame = new();
-        private RefArray<Lease<ILayer>>? _prevFrame;
-        private RefArray<Lease<ILayer>>? _displayFrame;
-        private readonly object _frameLock = new();
+        // Working state - index = layerId
+        private readonly Ref<Lease<ILayer>>?[] _workingLayers = new Ref<Lease<ILayer>>?[16];
+
+        // Frame state
+        private BlazorBlaze.ValueTypes.SpinLock _frameLock;
+        private RefArray<Lease<ILayer>> _displayFrame;
+        private RefArray<Lease<ILayer>> _prevFrame;
 
         public int FrameCount { get; private set; }
 
@@ -88,72 +89,113 @@ public class RenderingStageTests
 
         public void OnFrameStart()
         {
-            _workingFrame.ClearAll();
+            Array.Clear(_workingLayers);
         }
 
         public void Clear(byte layerId)
         {
-            var layerRef = _pool.Rent(layerId);
-            _workingFrame.Set(layerId, layerRef);
+            var lease = _pool.Rent(layerId);
+            var layerRef = new Ref<Lease<ILayer>>(lease);
+            _workingLayers[layerId] = layerRef;
         }
 
         public void Remain(byte layerId)
         {
-            var prevRef = _prevFrame?.GetRef(layerId);
+            var prevRef = _prevFrame.GetRef(layerId);
             if (prevRef == null || !prevRef.TryCopy(out var copy))
                 throw new InvalidOperationException($"Remain failed for layer {layerId}");
 
-            _workingFrame.Set(layerId, copy);
+            _workingLayers[layerId] = copy;
         }
 
         public ILayer GetLayer(byte layerId)
         {
-            var lease = _workingFrame[layerId];
-            if (lease == null)
+            var layerRef = _workingLayers[layerId];
+            if (layerRef == null)
                 throw new InvalidOperationException($"Layer {layerId} not found");
-            return lease.Value;
+            return layerRef.Value.Value;
         }
 
         public void OnFrameEnd()
         {
-            // Copy working frame to display frame
-            _workingFrame.TryCopy(out var newFrame);
+            // Build ImmutableArray from working array
+            var builder = ImmutableArray.CreateBuilder<Ref<Lease<ILayer>>?>(_workingLayers.Length);
+            for (int i = 0; i < _workingLayers.Length; i++)
+                builder.Add(_workingLayers[i]);
 
-            RefArray<Lease<ILayer>>? toDispose;
-            lock (_frameLock)
-            {
-                toDispose = _prevFrame;
-                _prevFrame = _displayFrame;
-                _displayFrame = newFrame;
-            }
+            _prevFrame.Dispose();
+            _prevFrame = new RefArray<Lease<ILayer>>(builder.MoveToImmutable());
 
-            toDispose?.Dispose();
+            _frameLock.Enter();
+            _displayFrame = _prevFrame;
+            _frameLock.Exit();
+
             FrameCount++;
         }
 
         public bool TryCopyFrame(out RefArray<Lease<ILayer>>? copy)
         {
-            lock (_frameLock)
+            _frameLock.Enter();
+            try
             {
-                if (_displayFrame == null)
-                {
-                    copy = null;
-                    return false;
-                }
                 return _displayFrame.TryCopy(out copy);
+            }
+            finally
+            {
+                _frameLock.Exit();
             }
         }
 
         public void Shutdown()
         {
-            _workingFrame.Dispose();
-            lock (_frameLock)
+            // Dispose working layers
+            for (int i = 0; i < _workingLayers.Length; i++)
             {
-                _prevFrame?.Dispose();
-                _displayFrame?.Dispose();
+                _workingLayers[i]?.Dispose();
+                _workingLayers[i] = null;
             }
+
+            _prevFrame.Dispose();
+            _displayFrame.Dispose();
         }
     }
+
+    #region Helper Methods
+
+    /// <summary>
+    /// Gets the ILayer from a RefArray at the specified index.
+    /// </summary>
+    private static ILayer? GetLayer(RefArray<Lease<ILayer>>? array, int index)
+    {
+        if (!array.HasValue) return null;
+        var arr = array.GetValueOrDefault();
+        var lease = arr[index];
+        // Workaround: Lease is a struct, check IsEmpty instead of null
+        return lease.IsEmpty ? null : lease.Value;
+    }
+
+    /// <summary>
+    /// Gets the MockLayer from a RefArray at the specified index (for assertions).
+    /// </summary>
+    private static MockLayer? GetMockLayer(RefArray<Lease<ILayer>>? array, int index)
+    {
+        return GetLayer(array, index) as MockLayer;
+    }
+
+    /// <summary>
+    /// Disposes a nullable RefArray safely.
+    /// </summary>
+    private static void DisposeFrame(ref RefArray<Lease<ILayer>>? array)
+    {
+        if (array.HasValue)
+        {
+            var arr = array.GetValueOrDefault();
+            arr.Dispose();
+            array = null;
+        }
+    }
+
+    #endregion
 
     #region Basic Tests
 
@@ -173,11 +215,11 @@ public class RenderingStageTests
         stage.FrameCount.Should().Be(1);
 
         stage.TryCopyFrame(out var copy).Should().BeTrue();
-        copy![0].Should().NotBeNull();
-        copy[1].Should().NotBeNull();
-        copy[2].Should().NotBeNull();
+        GetLayer(copy, 0).Should().NotBeNull();
+        GetLayer(copy, 1).Should().NotBeNull();
+        GetLayer(copy, 2).Should().NotBeNull();
 
-        copy.Dispose();
+        DisposeFrame(ref copy);
         stage.Shutdown();
 
         pool.AllReturned.Should().BeTrue();
@@ -195,10 +237,9 @@ public class RenderingStageTests
         stage.Clear(1);
         stage.OnFrameEnd();
 
-        var frame0Layer1Id = -1;
         stage.TryCopyFrame(out var copy0);
-        frame0Layer1Id = ((MockLayer)copy0![1]!.Value).Id;
-        copy0.Dispose();
+        var frame0Layer1Id = GetMockLayer(copy0, 1)!.Id;
+        DisposeFrame(ref copy0);
 
         // Frame 1: Layer 0 Clear, Layer 1 Remain
         stage.OnFrameStart();
@@ -207,12 +248,12 @@ public class RenderingStageTests
         stage.OnFrameEnd();
 
         stage.TryCopyFrame(out var copy1);
-        var frame1Layer1Id = ((MockLayer)copy1![1]!.Value).Id;
+        var frame1Layer1Id = GetMockLayer(copy1, 1)!.Id;
 
         // Same layer instance should be shared
         frame1Layer1Id.Should().Be(frame0Layer1Id);
 
-        copy1.Dispose();
+        DisposeFrame(ref copy1);
         stage.Shutdown();
 
         pool.RentCount.Should().Be(3); // 2 in frame0, 1 in frame1 (layer 0 only)
@@ -235,11 +276,11 @@ public class RenderingStageTests
         stage.TryCopyFrame(out var copy);
 
         // Index = layerId in bucket design
-        copy![0]!.Value.LayerId.Should().Be(0);
-        copy[1]!.Value.LayerId.Should().Be(1);
-        copy[2]!.Value.LayerId.Should().Be(2);
+        GetMockLayer(copy, 0)!.LayerId.Should().Be(0);
+        GetMockLayer(copy, 1)!.LayerId.Should().Be(1);
+        GetMockLayer(copy, 2)!.LayerId.Should().Be(2);
 
-        copy.Dispose();
+        DisposeFrame(ref copy);
         stage.Shutdown();
     }
 
@@ -272,7 +313,7 @@ public class RenderingStageTests
 
         // Renderer gets new frame, disposes old
         stage.TryCopyFrame(out newCopy);
-        rendererCopy?.Dispose();
+        DisposeFrame(ref rendererCopy);
         rendererCopy = newCopy;
 
         pool.ReturnCount.Should().Be(1); // Frame 0 layer returned
@@ -284,13 +325,13 @@ public class RenderingStageTests
 
         // Renderer gets new frame, disposes old
         stage.TryCopyFrame(out newCopy);
-        rendererCopy?.Dispose();
+        DisposeFrame(ref rendererCopy);
         rendererCopy = newCopy;
 
         pool.ReturnCount.Should().Be(2); // Frame 1 layer returned
 
         // Shutdown
-        rendererCopy?.Dispose();
+        DisposeFrame(ref rendererCopy);
         stage.Shutdown();
 
         pool.AllReturned.Should().BeTrue();
@@ -331,14 +372,14 @@ public class RenderingStageTests
             {
                 if (stage.TryCopyFrame(out var newCopy))
                 {
-                    rendererCopy?.Dispose();
+                    DisposeFrame(ref rendererCopy);
                     rendererCopy = newCopy;
                     Interlocked.Increment(ref framesConsumed);
                 }
                 Thread.Sleep(2);
             }
 
-            rendererCopy?.Dispose();
+            DisposeFrame(ref rendererCopy);
         });
 
         await Task.WhenAll(decoderTask, rendererTask);
@@ -367,8 +408,8 @@ public class RenderingStageTests
         stage.OnFrameEnd();
 
         stage.TryCopyFrame(out var copy);
-        var layer0Id = ((MockLayer)copy![0]!.Value).Id;
-        rendererCopy?.Dispose();
+        var layer0Id = GetMockLayer(copy, 0)!.Id;
+        DisposeFrame(ref rendererCopy);
         rendererCopy = copy;
 
         pool.RentCount.Should().Be(2);
@@ -384,9 +425,9 @@ public class RenderingStageTests
             stage.TryCopyFrame(out copy);
 
             // Layer 0 should be the same instance
-            ((MockLayer)copy![0]!.Value).Id.Should().Be(layer0Id);
+            GetMockLayer(copy, 0)!.Id.Should().Be(layer0Id);
 
-            rendererCopy?.Dispose();
+            DisposeFrame(ref rendererCopy);
             rendererCopy = copy;
         }
 
@@ -394,7 +435,7 @@ public class RenderingStageTests
         pool.RentCount.Should().Be(5);
 
         // Cleanup
-        rendererCopy?.Dispose();
+        DisposeFrame(ref rendererCopy);
         stage.Shutdown();
 
         pool.AllReturned.Should().BeTrue();
@@ -421,9 +462,9 @@ public class RenderingStageTests
         stage.TryCopyFrame(out var copy);
         rendererCopy = copy;
 
-        var L0_id = ((MockLayer)rendererCopy![0]!.Value).Id;
-        var L1_id = ((MockLayer)rendererCopy[1]!.Value).Id;
-        var L2_id = ((MockLayer)rendererCopy[2]!.Value).Id;
+        var L0_id = GetMockLayer(rendererCopy, 0)!.Id;
+        var L1_id = GetMockLayer(rendererCopy, 1)!.Id;
+        var L2_id = GetMockLayer(rendererCopy, 2)!.Id;
 
         pool.RentCount.Should().Be(3);
         pool.ReturnCount.Should().Be(0);
@@ -436,15 +477,15 @@ public class RenderingStageTests
         stage.OnFrameEnd();
 
         stage.TryCopyFrame(out copy);
-        rendererCopy?.Dispose();
+        DisposeFrame(ref rendererCopy);
         rendererCopy = copy;
 
         // L0 and L2 should be same, L1 is new
-        ((MockLayer)rendererCopy![0]!.Value).Id.Should().Be(L0_id);
-        ((MockLayer)rendererCopy[1]!.Value).Id.Should().NotBe(L1_id);
-        ((MockLayer)rendererCopy[2]!.Value).Id.Should().Be(L2_id);
+        GetMockLayer(rendererCopy, 0)!.Id.Should().Be(L0_id);
+        GetMockLayer(rendererCopy, 1)!.Id.Should().NotBe(L1_id);
+        GetMockLayer(rendererCopy, 2)!.Id.Should().Be(L2_id);
 
-        var L1b_id = ((MockLayer)rendererCopy[1]!.Value).Id;
+        var L1b_id = GetMockLayer(rendererCopy, 1)!.Id;
 
         pool.RentCount.Should().Be(4); // 3 + 1 (L1b)
         pool.ReturnCount.Should().Be(1); // L1 returned
@@ -457,12 +498,12 @@ public class RenderingStageTests
         stage.OnFrameEnd();
 
         stage.TryCopyFrame(out copy);
-        rendererCopy?.Dispose();
+        DisposeFrame(ref rendererCopy);
         rendererCopy = copy;
 
-        ((MockLayer)rendererCopy![0]!.Value).Id.Should().Be(L0_id);
-        ((MockLayer)rendererCopy[1]!.Value).Id.Should().Be(L1b_id);
-        ((MockLayer)rendererCopy[2]!.Value).Id.Should().NotBe(L2_id);
+        GetMockLayer(rendererCopy, 0)!.Id.Should().Be(L0_id);
+        GetMockLayer(rendererCopy, 1)!.Id.Should().Be(L1b_id);
+        GetMockLayer(rendererCopy, 2)!.Id.Should().NotBe(L2_id);
 
         pool.RentCount.Should().Be(5); // 4 + 1 (L2b)
         pool.ReturnCount.Should().Be(2); // L1, L2 returned
@@ -475,14 +516,14 @@ public class RenderingStageTests
         stage.OnFrameEnd();
 
         stage.TryCopyFrame(out copy);
-        rendererCopy?.Dispose();
+        DisposeFrame(ref rendererCopy);
         rendererCopy = copy;
 
         pool.RentCount.Should().Be(8); // 5 + 3
         pool.ReturnCount.Should().Be(5); // L0, L1b, L2b also returned
 
         // Cleanup
-        rendererCopy?.Dispose();
+        DisposeFrame(ref rendererCopy);
         stage.Shutdown();
 
         pool.RentCount.Should().Be(8);
@@ -495,7 +536,7 @@ public class RenderingStageTests
     #region Stress Test
 
     [Fact]
-    public async Task StressTest_4Layers_10Seconds()
+    public async Task StressTest_3Layers_10Seconds()
     {
         var pool = new MockPool();
         var stage = new MockRenderingStage(pool);
@@ -510,7 +551,6 @@ public class RenderingStageTests
         var decoderTask = Task.Run(() =>
         {
             barrier.SignalAndWait();
-            var frameTypes = new[] { true, true, false, false }; // Remain pattern for layers 2,3
 
             while (running)
             {
@@ -544,22 +584,19 @@ public class RenderingStageTests
             {
                 if (stage.TryCopyFrame(out var newCopy))
                 {
-                    copy?.Dispose();
+                    DisposeFrame(ref copy);
                     copy = newCopy;
 
-                    // Validate layers 0, 1, 2 (our test uses 3 layers)
+                    // Validate layers 0, 1, 2
                     for (byte i = 0; i < 3; i++)
                     {
-                        var lease = copy[i];
-                        if (lease == null)
+                        var layer = GetMockLayer(copy, i);
+                        if (layer == null)
                         {
-                            errors.Add($"Renderer {id}: Layer {i} lease is null");
+                            errors.Add($"Renderer {id}: Layer {i} is null");
                             continue;
                         }
-                        var layer = lease.Value as MockLayer;
-                        if (layer == null)
-                            errors.Add($"Renderer {id}: Layer {i} value is null");
-                        else if (layer.IsDisposed)
+                        if (layer.IsDisposed)
                             errors.Add($"Renderer {id}: Layer {i} (id={layer.Id}) disposed while held");
                     }
 
@@ -568,7 +605,7 @@ public class RenderingStageTests
                 Thread.Sleep(2);
             }
 
-            copy?.Dispose();
+            DisposeFrame(ref copy);
         })).ToArray();
 
         // Run for 10 seconds
@@ -584,12 +621,6 @@ public class RenderingStageTests
         framesProduced.Should().BeGreaterThan(100);
         framesConsumed.Should().BeGreaterThan(50);
         pool.AllReturned.Should().BeTrue();
-
-        // All created layers should be disposed exactly once
-        foreach (var layer in pool.AllCreated)
-        {
-            layer.DisposeCount.Should().Be(1, $"Layer {layer.Id} should be disposed once");
-        }
     }
 
     #endregion

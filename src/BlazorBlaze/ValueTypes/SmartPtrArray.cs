@@ -73,9 +73,18 @@ public struct RefArray<T> : IDisposable where T : IDisposable
     internal ImmutableArray<Ref<T>?> Value => _array;
 
     /// <summary>
-    /// Get value at index. Returns null if array is default or index out of range.
+    /// Get value at index. Returns null/default if array is default, index out of range, or slot is null.
     /// </summary>
-    public T? this[int index] => _array.IsDefault || index >= _array.Length ? default(T) : _array[index].Value;
+    public T? this[int index]
+    {
+        get
+        {
+            if (_array.IsDefault || index >= _array.Length)
+                return default;
+            var r = _array[index];
+            return r == null ? default : r.Value;
+        }
+    }
 
     /// <summary>
     /// Get the underlying Ref at index. Returns null if array is default or index out of range.

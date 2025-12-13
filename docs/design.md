@@ -291,7 +291,7 @@ public interface IStage
 public interface ILayer : IDisposable
 {
     byte LayerId { get; }
-    SKCanvas Canvas { get; }
+    ICanvas Canvas { get; }  // Protocol.ICanvas - abstraction over SKCanvas
     void Clear();
     void DrawTo(SKCanvas target);
 }

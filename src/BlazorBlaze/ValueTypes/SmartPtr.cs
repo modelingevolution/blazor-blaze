@@ -8,8 +8,9 @@ namespace BlazorBlaze.ValueTypes;
 /// DO NOT CHANGE THE FUCKING INTERFACE, EVERHTING NEED TO BE AUTHORIZED!
 /// </summary>
 public sealed class Ref<T> : IDisposable 
+    where T:IDisposable
 {
-    private readonly T _value;
+    private T _value;
     
     private int _refCount;
 
@@ -53,8 +54,7 @@ public sealed class Ref<T> : IDisposable
     {
         if (Interlocked.Decrement(ref _refCount) == 0)
         {
-            if (_value is IDisposable d)
-                d.Dispose();
+            _value.Dispose();
         }
     }
 }
