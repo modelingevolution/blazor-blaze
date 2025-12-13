@@ -7,7 +7,7 @@ namespace BlazorBlaze.ValueTypes;
 /// Thread-safe for concurrent TryCopy/Dispose operations.
 /// DO NOT CHANGE THE FUCKING INTERFACE, EVERHTING NEED TO BE AUTHORIZED!
 /// </summary>
-public sealed class Ref<T> : IDisposable where T : class
+public sealed class Ref<T> : IDisposable 
 {
     private readonly T _value;
     

@@ -47,7 +47,7 @@ public struct SpinLock
 ///
 /// 6. DO NOT COPY THE ARRAY IN TryCopy - just increment ref counts
 /// </summary>
-public struct RefArray<T> : IDisposable where T : class, IDisposable
+public struct RefArray<T> : IDisposable where T : IDisposable
 {
     private readonly ImmutableArray<Ref<T>?> _array;
     private SpinLock _lock;
@@ -68,7 +68,7 @@ public struct RefArray<T> : IDisposable where T : class, IDisposable
     /// <summary>
     /// Get value at index. Returns null if array is default or index out of range.
     /// </summary>
-    public T? this[int index] => _array.IsDefault || index >= _array.Length ? null : _array[index]?.Value;
+    public T? this[int index] => _array.IsDefault || index >= _array.Length ? default(T) : _array[index].Value;
 
     /// <summary>
     /// Get the underlying Ref at index. Returns null if array is default or index out of range.
