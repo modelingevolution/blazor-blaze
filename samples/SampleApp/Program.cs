@@ -27,8 +27,8 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 
 app.UseWebSockets();
 
-// WebSocket endpoint for 20K point stress test using Protocol v2 (multi-layer, stateful context)
-app.MapVectorGraphicsEndpointV2("/ws/stress20k", StreamStressTestFramesV2);
+// WebSocket endpoint for 20K point stress test (multi-layer, stateful context)
+app.MapVectorGraphicsEndpoint("/ws/stress20k", StreamStressTestFramesV2);
 
 app.UseAntiforgery();
 

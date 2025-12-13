@@ -83,6 +83,7 @@ public class RenderingStage : IStage, IDisposable
         for (int i = 0; i < _workingLayers.Length; i++)
             builder.Add(_workingLayers[i]);
 
+        _prevFrame.Dispose();
         _prevFrame = new RefArray<Lease<ILayer>>(builder.MoveToImmutable());
 
         _frameLock.Enter();

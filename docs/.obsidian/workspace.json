@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "design-protocol-v2.md",
+                "file": "design.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "design-protocol-v2"
+              "title": "design"
             }
           }
         ]
@@ -185,18 +185,20 @@
   },
   "active": "ab3fe495b7973b62",
   "lastOpenFiles": [
-    "archive-design-rendering-stream.md",
+    "design.md.tmp.928.1765645876320",
+    "design.md.tmp.928.1765645857650",
+    "design.md.tmp.928.1765636262447",
     "design-protocol-v2.md",
+    "design.md",
+    "design.md.tmp.928.1765632641038",
+    "archive-design-rendering-stream.md",
+    "design.md.tmp.64971.1765533305170",
+    "design.md.tmp.64971.1765492391307",
     "design-protocol-v2.md.tmp.64971.1765450983036",
     "design-protocol-v2.md.tmp.64971.1765450959236",
     "design-protocol-v2.md.tmp.64971.1765450943098",
     "design-protocol-v2.md.tmp.64971.1765450917411",
     "design-rendering-stream.md.tmp.64971.1765372852608",
-    "design-rendering-stream.md.tmp.64971.1765372843061",
-    "design-rendering-stream.md.tmp.64971.1765372830910",
-    "design-rendering-stream.md.tmp.64971.1765372656795",
-    "design-rendering-stream.md.tmp.64971.1765372645518",
-    "design-rendering-stream.md.tmp.64971.1765372629614",
     "design-rendering-stream.md",
     "design-vectorgraphics-streaming-v2.md",
     "design-stream-translators.md"

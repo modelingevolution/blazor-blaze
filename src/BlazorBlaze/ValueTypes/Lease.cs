@@ -16,7 +16,7 @@ public struct Lease<T> : IDisposable
     private readonly T _value;
     private readonly Action<T> _returnToPool;
     private int _disposed;
-
+    public bool IsEmpty => _value == null;
     public Lease(T value, Action<T> returnToPool)
     {
         _value = value ?? throw new ArgumentNullException(nameof(value));

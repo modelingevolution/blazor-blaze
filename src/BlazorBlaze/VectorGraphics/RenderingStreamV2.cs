@@ -1,10 +1,39 @@
 using System.Net.WebSockets;
 using Microsoft.Extensions.Logging;
+using BlazorBlaze.ValueTypes;
 using BlazorBlaze.VectorGraphics.Protocol;
 using ModelingEvolution;
 using SkiaSharp;
 
 namespace BlazorBlaze.VectorGraphics;
+
+/// <summary>
+/// Simple layer pool that creates new layers on demand.
+/// For production, this could be enhanced with actual pooling.
+/// </summary>
+internal class SimpleLayerPool : ILayerPool
+{
+    private readonly int _width;
+    private readonly int _height;
+
+    public SimpleLayerPool(int width, int height)
+    {
+        _width = width;
+        _height = height;
+    }
+
+    public Lease<ILayer> Rent(byte layerId)
+    {
+        var layer = new LayerCanvas(_width, _height, layerId);
+        return new Lease<ILayer>(layer, Return);
+    }
+
+    private void Return(ILayer layer)
+    {
+        // For now, just dispose - a real pool would recycle
+        layer.Dispose();
+    }
+}
 
 /// <summary>
 /// Protocol v2 rendering stream that handles WebSocket connection and decoding
@@ -13,14 +42,17 @@ namespace BlazorBlaze.VectorGraphics;
 public class RenderingStreamV2 : IRenderingStream
 {
     private readonly VectorGraphicsDecoderV2 _decoder;
-    private readonly RenderingCallbackV2 _callback;
-    private readonly LayerManager _layerManager;
+    private readonly RenderingStage _stage;
+    private readonly SimpleLayerPool _layerPool;
     private readonly ILogger _logger;
     private readonly int _maxBufferSize;
-    private readonly object _sync = new();
     private ClientWebSocket? _socket;
     private CancellationTokenSource? _cts;
     private Task? _receiveTask;
+
+    // Renderer's current frame copy
+    private RefArray<Lease<ILayer>>? _rendererFrame;
+    private readonly object _renderLock = new();
 
     // Transfer rate tracking (sliding window of 1 second)
     private readonly Queue<(long timestamp, int bytes)> _bytesWindow = new();
@@ -33,9 +65,9 @@ public class RenderingStreamV2 : IRenderingStream
         ILoggerFactory loggerFactory,
         int maxBufferSize = 8 * 1024 * 1024)
     {
-        _layerManager = new LayerManager(width, height);
-        _callback = new RenderingCallbackV2(_layerManager);
-        _decoder = new VectorGraphicsDecoderV2();
+        _layerPool = new SimpleLayerPool(width, height);
+        _stage = new RenderingStage(width, height, _layerPool);
+        _decoder = new VectorGraphicsDecoderV2(_stage);
         _logger = loggerFactory.CreateLogger<RenderingStreamV2>();
         _maxBufferSize = maxBufferSize;
     }
@@ -117,10 +149,7 @@ public class RenderingStreamV2 : IRenderingStream
                     while (data.Length > 0)
                     {
                         DecodeResultV2 decoded;
-                        lock (_sync)
-                        {
-                            decoded = _decoder.Decode(data, _callback);
-                        }
+                        decoded = _decoder.Decode(data);
 
                         if (decoded.Success && decoded.FrameId.HasValue)
                         {
@@ -204,9 +233,29 @@ public class RenderingStreamV2 : IRenderingStream
 
     public void Render(SKCanvas canvas)
     {
-        lock (_sync)
+        // Try to get a new frame if available
+        if (_stage.TryCopyFrame(out var newFrame))
         {
-            _layerManager.Composite(canvas);
+            lock (_renderLock)
+            {
+                _rendererFrame?.Dispose();
+                _rendererFrame = newFrame;
+            }
+        }
+
+        // Render current frame - iterate through layer slots in order
+        lock (_renderLock)
+        {
+            if (_rendererFrame != null)
+            {
+                var frame = _rendererFrame.Value;
+                for (byte i = 0; i < 16; i++)
+                {
+                    var layer = frame[i];
+                    if (layer is { } l)
+                        l.Value.DrawTo(canvas);
+                }
+            }
         }
     }
 
@@ -215,6 +264,13 @@ public class RenderingStreamV2 : IRenderingStream
         await DisconnectAsync();
         _socket?.Dispose();
         _cts?.Dispose();
-        _layerManager.Dispose();
+
+        lock (_renderLock)
+        {
+            _rendererFrame?.Dispose();
+            _rendererFrame = null;
+        }
+
+        _stage.Dispose();
     }
 }

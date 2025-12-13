@@ -8,12 +8,15 @@ namespace BlazorBlaze.Server;
 /// <summary>
 /// WebSocket-based implementation of IRemoteCanvasV2 that encodes and streams
 /// vector graphics to connected clients using Protocol v2 (multi-layer, stateful context).
+///
+/// Uses direct encoding - operations write immediately to buffer without deferred execution,
+/// eliminating lambda allocations and array copies.
 /// </summary>
 public sealed class WebSocketRemoteCanvasV2 : IRemoteCanvasV2
 {
     private readonly WebSocket _webSocket;
     private readonly byte[] _buffer;
-    private readonly Dictionary<byte, LayerCanvasImpl> _layers = new();
+    private readonly Dictionary<byte, LayerEncoderImpl> _layers = new();
     private readonly List<byte> _activeLayerIds = new();
 
     private ulong _frameId;
@@ -30,7 +33,7 @@ public sealed class WebSocketRemoteCanvasV2 : IRemoteCanvasV2
     {
         if (!_layers.TryGetValue(layerId, out var layer))
         {
-            layer = new LayerCanvasImpl(layerId);
+            layer = new LayerEncoderImpl(layerId, _buffer);
             _layers[layerId] = layer;
         }
 
@@ -68,17 +71,14 @@ public sealed class WebSocketRemoteCanvasV2 : IRemoteCanvasV2
         var span = _buffer.AsSpan();
         int offset = 0;
 
-        // Sort layer IDs to ensure consistent ordering
-        _activeLayerIds.Sort();
-
-        // Write message header
+        // Write message header (client will sort layers for compositing)
         offset += VectorGraphicsEncoderV2.WriteMessageHeader(span, _frameId, (byte)_activeLayerIds.Count);
 
-        // Encode each layer
+        // Encode each layer - copy encoded data from layer buffers
         foreach (var layerId in _activeLayerIds)
         {
             var layer = _layers[layerId];
-            offset += layer.Encode(span.Slice(offset));
+            offset += layer.CopyEncodedData(span.Slice(offset));
         }
 
         // Write end marker
@@ -99,53 +99,68 @@ public sealed class WebSocketRemoteCanvasV2 : IRemoteCanvasV2
     }
 
     /// <summary>
-    /// Internal layer canvas implementation that tracks operations for encoding.
+    /// Internal layer encoder that writes operations directly to buffer.
+    /// No deferred execution - each operation immediately encodes its data.
     /// </summary>
-    private sealed class LayerCanvasImpl : ILayerCanvas
+    private sealed class LayerEncoderImpl : ILayerCanvas
     {
-        private readonly List<Action<Span<byte>, CountingWriter>> _operations = new();
+        private readonly byte[] _layerBuffer;
+        private readonly byte _layerId;
         private FrameType _frameType = FrameType.Master;
+        private int _operationCount;
+        private int _dataOffset; // Current write position in buffer (after header space)
 
-        public byte LayerId { get; }
+        // Reserve space for layer header at start of buffer
+        private const int HeaderReserve = 16; // LayerId(1) + FrameType(1) + OpCount(varint up to 5) + padding
 
-        public LayerCanvasImpl(byte layerId)
+        public byte LayerId => _layerId;
+
+        public LayerEncoderImpl(byte layerId, byte[] sharedBuffer)
         {
-            LayerId = layerId;
+            _layerId = layerId;
+            // Each layer gets its own section of a shared buffer or uses a dedicated buffer
+            // For simplicity, use a dedicated buffer per layer
+            _layerBuffer = new byte[64 * 1024]; // 64KB per layer should be enough
+            _dataOffset = HeaderReserve;
         }
 
         public void Reset()
         {
-            _operations.Clear();
             _frameType = FrameType.Master;
+            _operationCount = 0;
+            _dataOffset = HeaderReserve;
         }
 
-        public int Encode(Span<byte> buffer)
+        /// <summary>
+        /// Copies the encoded layer data (with header) to the destination buffer.
+        /// </summary>
+        public int CopyEncodedData(Span<byte> destination)
         {
             int offset = 0;
 
             switch (_frameType)
             {
                 case FrameType.Master:
-                    offset += VectorGraphicsEncoderV2.WriteLayerMaster(buffer, LayerId, (uint)_operations.Count);
-                    var writer = new CountingWriter { Offset = offset };
-                    foreach (var op in _operations)
-                    {
-                        op(buffer, writer);
-                    }
-                    offset = writer.Offset;
+                    offset += VectorGraphicsEncoderV2.WriteLayerMaster(destination, _layerId, (uint)_operationCount);
+                    // Copy operation data
+                    var dataLength = _dataOffset - HeaderReserve;
+                    _layerBuffer.AsSpan(HeaderReserve, dataLength).CopyTo(destination.Slice(offset));
+                    offset += dataLength;
                     break;
 
                 case FrameType.Remain:
-                    offset += VectorGraphicsEncoderV2.WriteLayerRemain(buffer, LayerId);
+                    offset += VectorGraphicsEncoderV2.WriteLayerRemain(destination, _layerId);
                     break;
 
                 case FrameType.Clear:
-                    offset += VectorGraphicsEncoderV2.WriteLayerClear(buffer, LayerId);
+                    offset += VectorGraphicsEncoderV2.WriteLayerClear(destination, _layerId);
                     break;
             }
 
             return offset;
         }
+
+        private Span<byte> GetWriteSpan() => _layerBuffer.AsSpan(_dataOffset);
 
         #region Frame Type
 
@@ -159,42 +174,32 @@ public sealed class WebSocketRemoteCanvasV2 : IRemoteCanvasV2
 
         public void SetStroke(RgbColor color)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteSetStroke(buffer.Slice(writer.Offset), color);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetStroke(GetWriteSpan(), color);
+            _operationCount++;
         }
 
         public void SetFill(RgbColor color)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteSetFill(buffer.Slice(writer.Offset), color);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetFill(GetWriteSpan(), color);
+            _operationCount++;
         }
 
         public void SetThickness(int width)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteSetThickness(buffer.Slice(writer.Offset), width);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetThickness(GetWriteSpan(), width);
+            _operationCount++;
         }
 
         public void SetFontSize(int size)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteSetFontSize(buffer.Slice(writer.Offset), size);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetFontSize(GetWriteSpan(), size);
+            _operationCount++;
         }
 
         public void SetFontColor(RgbColor color)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteSetFontColor(buffer.Slice(writer.Offset), color);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetFontColor(GetWriteSpan(), color);
+            _operationCount++;
         }
 
         #endregion
@@ -203,42 +208,32 @@ public sealed class WebSocketRemoteCanvasV2 : IRemoteCanvasV2
 
         public void Translate(float dx, float dy)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteSetOffset(buffer.Slice(writer.Offset), dx, dy);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetOffset(GetWriteSpan(), dx, dy);
+            _operationCount++;
         }
 
         public void Rotate(float degrees)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteSetRotation(buffer.Slice(writer.Offset), degrees);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetRotation(GetWriteSpan(), degrees);
+            _operationCount++;
         }
 
         public void Scale(float sx, float sy)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteSetScale(buffer.Slice(writer.Offset), sx, sy);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetScale(GetWriteSpan(), sx, sy);
+            _operationCount++;
         }
 
         public void Skew(float kx, float ky)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteSetSkew(buffer.Slice(writer.Offset), kx, ky);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetSkew(GetWriteSpan(), kx, ky);
+            _operationCount++;
         }
 
         public void SetMatrix(SKMatrix matrix)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteSetMatrix(buffer.Slice(writer.Offset), matrix);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetMatrix(GetWriteSpan(), matrix);
+            _operationCount++;
         }
 
         #endregion
@@ -247,26 +242,20 @@ public sealed class WebSocketRemoteCanvasV2 : IRemoteCanvasV2
 
         public void Save()
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteSaveContext(buffer.Slice(writer.Offset));
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteSaveContext(GetWriteSpan());
+            _operationCount++;
         }
 
         public void Restore()
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteRestoreContext(buffer.Slice(writer.Offset));
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteRestoreContext(GetWriteSpan());
+            _operationCount++;
         }
 
         public void ResetContext()
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteResetContext(buffer.Slice(writer.Offset));
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteResetContext(GetWriteSpan());
+            _operationCount++;
         }
 
         #endregion
@@ -275,54 +264,35 @@ public sealed class WebSocketRemoteCanvasV2 : IRemoteCanvasV2
 
         public void DrawPolygon(ReadOnlySpan<SKPoint> points)
         {
-            // Need to copy points since Span can't be captured in closure
-            var pointsCopy = points.ToArray();
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteDrawPolygon(buffer.Slice(writer.Offset), pointsCopy);
-            });
+            // Direct encoding - no array copy needed!
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawPolygon(GetWriteSpan(), points);
+            _operationCount++;
         }
 
         public void DrawText(string text, int x, int y)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteDrawText(buffer.Slice(writer.Offset), text, x, y);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawText(GetWriteSpan(), text, x, y);
+            _operationCount++;
         }
 
         public void DrawCircle(int centerX, int centerY, int radius)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteDrawCircle(buffer.Slice(writer.Offset), centerX, centerY, radius);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawCircle(GetWriteSpan(), centerX, centerY, radius);
+            _operationCount++;
         }
 
         public void DrawRectangle(int x, int y, int width, int height)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteDrawRect(buffer.Slice(writer.Offset), x, y, width, height);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawRect(GetWriteSpan(), x, y, width, height);
+            _operationCount++;
         }
 
         public void DrawLine(int x1, int y1, int x2, int y2)
         {
-            _operations.Add((buffer, writer) =>
-            {
-                writer.Offset += VectorGraphicsEncoderV2.WriteDrawLine(buffer.Slice(writer.Offset), x1, y1, x2, y2);
-            });
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawLine(GetWriteSpan(), x1, y1, x2, y2);
+            _operationCount++;
         }
 
         #endregion
-    }
-
-    /// <summary>
-    /// Helper class to track offset through operation callbacks.
-    /// </summary>
-    private sealed class CountingWriter
-    {
-        public int Offset;
     }
 }

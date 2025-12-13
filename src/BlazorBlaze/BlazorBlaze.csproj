@@ -27,7 +27,6 @@
     <PackageReference Include="System.Reactive" />
     <PackageReference Include="System.Collections.Immutable" />
     <PackageReference Include="Nito.AsyncEx" />
-    <PackageReference Include="protobuf-net" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 

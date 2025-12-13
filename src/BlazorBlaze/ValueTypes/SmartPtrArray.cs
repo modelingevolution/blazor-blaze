@@ -1,3 +1,4 @@
+using BlazorBlaze.VectorGraphics;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 
@@ -52,8 +53,14 @@ public struct RefArray<T> : IDisposable where T : IDisposable
     private readonly ImmutableArray<Ref<T>?> _array;
     private SpinLock _lock;
     private bool _disposed;
+    public RefArray(int capacity)
+    {
+        _array = ImmutableArray.CreateBuilder<Ref<T>?>(capacity).ToImmutableArray();
+        _lock = default;
+        _disposed = false;
 
-    public RefArray(ImmutableArray<Ref<T>?> items)
+    }
+    internal RefArray(ImmutableArray<Ref<T>?> items)
     {
         _array = items;
         _lock = default;

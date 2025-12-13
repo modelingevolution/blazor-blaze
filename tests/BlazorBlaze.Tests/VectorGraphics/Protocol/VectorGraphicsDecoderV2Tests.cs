@@ -3,17 +3,19 @@ using BlazorBlaze.VectorGraphics.Protocol;
 using NSubstitute;
 using SkiaSharp;
 
+using ICanvas = BlazorBlaze.VectorGraphics.Protocol.ICanvas;
+
 namespace ModelingEvolution.BlazorBlaze.Tests.VectorGraphics.Protocol;
 
 public class VectorGraphicsDecoderV2Tests
 {
     private readonly VectorGraphicsDecoderV2 _decoder;
-    private readonly TestDecoderCallback _callback;
+    private readonly TestStage _stage;
 
     public VectorGraphicsDecoderV2Tests()
     {
-        _decoder = new VectorGraphicsDecoderV2();
-        _callback = new TestDecoderCallback();
+        _stage = new TestStage();
+        _decoder = new VectorGraphicsDecoderV2(_stage);
     }
 
     #region Message Header Tests
@@ -23,7 +25,7 @@ public class VectorGraphicsDecoderV2Tests
     {
         var smallBuffer = new byte[] { 0x00, 0x01, 0x02 };
 
-        var result = _decoder.Decode(smallBuffer, _callback);
+        var result = _decoder.Decode(smallBuffer);
 
         result.Success.Should().BeFalse();
         result.BytesConsumed.Should().Be(0);
@@ -42,7 +44,7 @@ public class VectorGraphicsDecoderV2Tests
         // End marker
         offset += VectorGraphicsEncoderV2.WriteEndMarker(buffer.AsSpan(offset));
 
-        var result = _decoder.Decode(buffer.AsSpan(0, offset), _callback);
+        var result = _decoder.Decode(buffer.AsSpan(0, offset));
 
         result.Success.Should().BeTrue();
         result.FrameId.Should().Be(12345UL);
@@ -55,12 +57,11 @@ public class VectorGraphicsDecoderV2Tests
     {
         var buffer = CreateMinimalMessage(frameId: 100, layerCount: 1, layerId: 5, FrameType.Remain);
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.FrameStartCalls.Should().Be(1);
-        _callback.LastFrameId.Should().Be(100UL);
-        _callback.LastLayerCount.Should().Be(1);
-        _callback.FrameEndCalls.Should().Be(1);
+        _stage.FrameStartCalls.Should().Be(1);
+        _stage.LastFrameId.Should().Be(100UL);
+        _stage.FrameEndCalls.Should().Be(1);
     }
 
     #endregion
@@ -68,26 +69,38 @@ public class VectorGraphicsDecoderV2Tests
     #region Layer Block Tests
 
     [Fact]
-    public void Decode_LayerRemain_CallsLayerStartEnd()
+    public void Decode_LayerRemain_DoesNotClearLayer()
     {
         var buffer = CreateMinimalMessage(frameId: 1, layerCount: 1, layerId: 3, FrameType.Remain);
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.LayerStartCalls.Should().Be(1);
-        _callback.LastLayerId.Should().Be(3);
-        _callback.LastFrameType.Should().Be(FrameType.Remain);
-        _callback.LayerEndCalls.Should().Be(1);
+        // Remain type does not clear the layer
+        _stage.ClearLayerCalls.Should().Be(0);
     }
 
     [Fact]
-    public void Decode_LayerClear_CallsLayerStartEnd()
+    public void Decode_LayerClear_CallsClearLayer()
     {
         var buffer = CreateMinimalMessage(frameId: 1, layerCount: 1, layerId: 7, FrameType.Clear);
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.LastFrameType.Should().Be(FrameType.Clear);
+        // Clear type clears the layer
+        _stage.ClearLayerCalls.Should().Be(1);
+        _stage.LastClearedLayerId.Should().Be(7);
+    }
+
+    [Fact]
+    public void Decode_LayerMaster_CallsClearLayer()
+    {
+        var buffer = CreateMinimalMessage(frameId: 1, layerCount: 1, layerId: 5, FrameType.Master);
+
+        _decoder.Decode(buffer);
+
+        // Master type also clears the layer
+        _stage.ClearLayerCalls.Should().Be(1);
+        _stage.LastClearedLayerId.Should().Be(5);
     }
 
     [Fact]
@@ -98,21 +111,21 @@ public class VectorGraphicsDecoderV2Tests
 
         // Header: 3 layers
         offset += VectorGraphicsEncoderV2.WriteMessageHeader(buffer, 1, 3);
-        // Layer 0: Remain
+        // Layer 0: Remain (no clear)
         offset += VectorGraphicsEncoderV2.WriteLayerRemain(buffer.AsSpan(offset), 0);
-        // Layer 1: Clear
+        // Layer 1: Clear (clears layer)
         offset += VectorGraphicsEncoderV2.WriteLayerClear(buffer.AsSpan(offset), 1);
-        // Layer 2: Remain
+        // Layer 2: Remain (no clear)
         offset += VectorGraphicsEncoderV2.WriteLayerRemain(buffer.AsSpan(offset), 2);
         // End marker
         offset += VectorGraphicsEncoderV2.WriteEndMarker(buffer.AsSpan(offset));
 
-        var result = _decoder.Decode(buffer.AsSpan(0, offset), _callback);
+        var result = _decoder.Decode(buffer.AsSpan(0, offset));
 
         result.Success.Should().BeTrue();
         result.LayerCount.Should().Be(3);
-        _callback.LayerStartCalls.Should().Be(3);
-        _callback.LayerEndCalls.Should().Be(3);
+        // Only layer 1 (Clear) should cause ClearLayer to be called
+        _stage.ClearLayerCalls.Should().Be(1);
     }
 
     #endregion
@@ -120,169 +133,160 @@ public class VectorGraphicsDecoderV2Tests
     #region Context Operations Tests
 
     [Fact]
-    public void Decode_SetStroke_UpdatesContext()
+    public void Decode_SetStroke_PassesToDrawCall()
     {
+        var points = new SKPoint[] { new(0, 0), new(100, 100) };
         var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
         {
-            return VectorGraphicsEncoderV2.WriteSetStroke(ops, new RgbColor(255, 128, 64, 200));
-        });
+            int offset = 0;
+            offset += VectorGraphicsEncoderV2.WriteSetStroke(ops, new RgbColor(255, 128, 64, 200));
+            offset += VectorGraphicsEncoderV2.WriteDrawPolygon(ops.Slice(offset), points);
+            return offset;
+        }, opCount: 2);
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.SetContextCalls.Should().Be(1);
-        _callback.LastContext!.Stroke.R.Should().Be(255);
-        _callback.LastContext!.Stroke.G.Should().Be(128);
-        _callback.LastContext!.Stroke.B.Should().Be(64);
-        _callback.LastContext!.Stroke.A.Should().Be(200);
+        // Stroke is passed directly to DrawPolygon
+        _stage.DrawPolygonCalls.Should().Be(1);
+        _stage.LastPolygonStroke!.Value.R.Should().Be(255);
+        _stage.LastPolygonStroke!.Value.G.Should().Be(128);
+        _stage.LastPolygonStroke!.Value.B.Should().Be(64);
+        _stage.LastPolygonStroke!.Value.A.Should().Be(200);
     }
 
     [Fact]
-    public void Decode_SetFill_UpdatesContext()
+    public void Decode_SetThickness_PassesToDrawCall()
     {
+        var points = new SKPoint[] { new(0, 0), new(100, 100) };
         var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
         {
-            return VectorGraphicsEncoderV2.WriteSetFill(ops, new RgbColor(100, 150, 200, 128));
-        });
+            int offset = 0;
+            offset += VectorGraphicsEncoderV2.WriteSetThickness(ops, 5);
+            offset += VectorGraphicsEncoderV2.WriteDrawPolygon(ops.Slice(offset), points);
+            return offset;
+        }, opCount: 2);
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.LastContext!.Fill.R.Should().Be(100);
-        _callback.LastContext!.Fill.G.Should().Be(150);
-        _callback.LastContext!.Fill.B.Should().Be(200);
-        _callback.LastContext!.Fill.A.Should().Be(128);
+        _stage.LastPolygonThickness.Should().Be(5);
     }
 
     [Fact]
-    public void Decode_SetThickness_UpdatesContext()
+    public void Decode_SetFontSize_PassesToDrawText()
     {
         var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
         {
-            return VectorGraphicsEncoderV2.WriteSetThickness(ops, 5);
-        });
+            int offset = 0;
+            offset += VectorGraphicsEncoderV2.WriteSetFontSize(ops, 24);
+            offset += VectorGraphicsEncoderV2.WriteDrawText(ops.Slice(offset), "Test", 10, 20);
+            return offset;
+        }, opCount: 2);
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.LastContext!.Thickness.Should().Be(5);
+        _stage.DrawTextCalls.Should().Be(1);
+        var canvas = _stage.GetCanvas(0);
+        canvas.LastTextFontSize.Should().Be(24);
     }
 
     [Fact]
-    public void Decode_SetFontSize_UpdatesContext()
+    public void Decode_SetFontColor_PassesToDrawText()
     {
         var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
         {
-            return VectorGraphicsEncoderV2.WriteSetFontSize(ops, 24);
-        });
+            int offset = 0;
+            offset += VectorGraphicsEncoderV2.WriteSetFontColor(ops, new RgbColor(10, 20, 30, 255));
+            offset += VectorGraphicsEncoderV2.WriteDrawText(ops.Slice(offset), "Test", 10, 20);
+            return offset;
+        }, opCount: 2);
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.LastContext!.FontSize.Should().Be(24);
+        var canvas = _stage.GetCanvas(0);
+        canvas.LastTextColor!.Value.R.Should().Be(10);
+        canvas.LastTextColor!.Value.G.Should().Be(20);
+        canvas.LastTextColor!.Value.B.Should().Be(30);
     }
 
     [Fact]
-    public void Decode_SetFontColor_UpdatesContext()
+    public void Decode_SetOffset_CallsSetMatrix()
     {
+        var points = new SKPoint[] { new(0, 0), new(100, 100) };
         var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
         {
-            return VectorGraphicsEncoderV2.WriteSetFontColor(ops, new RgbColor(10, 20, 30, 255));
-        });
+            int offset = 0;
+            offset += VectorGraphicsEncoderV2.WriteSetOffset(ops, 100, 200);
+            offset += VectorGraphicsEncoderV2.WriteDrawPolygon(ops.Slice(offset), points);
+            return offset;
+        }, opCount: 2);
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.LastContext!.FontColor.R.Should().Be(10);
-        _callback.LastContext!.FontColor.G.Should().Be(20);
-        _callback.LastContext!.FontColor.B.Should().Be(30);
+        // SetOffset causes SetMatrix to be called with a translation matrix
+        _stage.SetMatrixCalls.Should().BeGreaterThan(0);
+        _stage.LastMatrix.TransX.Should().Be(100);
+        _stage.LastMatrix.TransY.Should().Be(200);
     }
 
     [Fact]
-    public void Decode_SetOffset_UpdatesContext()
+    public void Decode_SetScale_CallsSetMatrix()
     {
+        var points = new SKPoint[] { new(0, 0), new(100, 100) };
         var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
         {
-            return VectorGraphicsEncoderV2.WriteSetOffset(ops, 100, 200);
-        });
+            int offset = 0;
+            offset += VectorGraphicsEncoderV2.WriteSetScale(ops, 2.0f, 1.5f);
+            offset += VectorGraphicsEncoderV2.WriteDrawPolygon(ops.Slice(offset), points);
+            return offset;
+        }, opCount: 2);
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.LastContext!.Offset.X.Should().Be(100);
-        _callback.LastContext!.Offset.Y.Should().Be(200);
+        _stage.SetMatrixCalls.Should().BeGreaterThan(0);
+        _stage.LastMatrix.ScaleX.Should().Be(2.0f);
+        _stage.LastMatrix.ScaleY.Should().Be(1.5f);
     }
 
     [Fact]
-    public void Decode_SetRotation_UpdatesContext()
+    public void Decode_SetMatrix_CallsSetMatrixDirectly()
     {
-        var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
-        {
-            return VectorGraphicsEncoderV2.WriteSetRotation(ops, 45.0f);
-        });
-
-        _decoder.Decode(buffer, _callback);
-
-        _callback.LastContext!.Rotation.Should().Be(45.0f);
-    }
-
-    [Fact]
-    public void Decode_SetScale_UpdatesContext()
-    {
-        var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
-        {
-            return VectorGraphicsEncoderV2.WriteSetScale(ops, 2.0f, 1.5f);
-        });
-
-        _decoder.Decode(buffer, _callback);
-
-        _callback.LastContext!.Scale.X.Should().Be(2.0f);
-        _callback.LastContext!.Scale.Y.Should().Be(1.5f);
-    }
-
-    [Fact]
-    public void Decode_SetSkew_UpdatesContext()
-    {
-        var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
-        {
-            return VectorGraphicsEncoderV2.WriteSetSkew(ops, 0.5f, 0.25f);
-        });
-
-        _decoder.Decode(buffer, _callback);
-
-        _callback.LastContext!.Skew.X.Should().Be(0.5f);
-        _callback.LastContext!.Skew.Y.Should().Be(0.25f);
-    }
-
-    [Fact]
-    public void Decode_SetMatrix_UpdatesContext()
-    {
+        var points = new SKPoint[] { new(0, 0), new(100, 100) };
         var matrix = new SKMatrix(1.5f, 0.1f, 100f, 0.2f, 2.0f, 200f, 0, 0, 1);
         var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
         {
-            return VectorGraphicsEncoderV2.WriteSetMatrix(ops, matrix);
-        });
+            int offset = 0;
+            offset += VectorGraphicsEncoderV2.WriteSetMatrix(ops, matrix);
+            offset += VectorGraphicsEncoderV2.WriteDrawPolygon(ops.Slice(offset), points);
+            return offset;
+        }, opCount: 2);
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.LastContext!.Matrix.Should().NotBeNull();
-        _callback.LastContext!.Matrix!.Value.ScaleX.Should().Be(1.5f);
-        _callback.LastContext!.Matrix!.Value.SkewX.Should().Be(0.1f);
-        _callback.LastContext!.Matrix!.Value.TransX.Should().Be(100f);
-        _callback.LastContext!.Matrix!.Value.SkewY.Should().Be(0.2f);
-        _callback.LastContext!.Matrix!.Value.ScaleY.Should().Be(2.0f);
-        _callback.LastContext!.Matrix!.Value.TransY.Should().Be(200f);
+        _stage.SetMatrixCalls.Should().BeGreaterThan(0);
+        _stage.LastMatrix.ScaleX.Should().Be(1.5f);
+        _stage.LastMatrix.SkewX.Should().Be(0.1f);
+        _stage.LastMatrix.TransX.Should().Be(100f);
+        _stage.LastMatrix.SkewY.Should().Be(0.2f);
+        _stage.LastMatrix.ScaleY.Should().Be(2.0f);
+        _stage.LastMatrix.TransY.Should().Be(200f);
     }
 
     [Fact]
-    public void Decode_SaveContext_CallsCallback()
+    public void Decode_SaveContext_CallsCanvasSave()
     {
         var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
         {
             return VectorGraphicsEncoderV2.WriteSaveContext(ops);
         });
 
-        _decoder.Decode(buffer, _callback);
+        var result = _decoder.Decode(buffer);
 
-        _callback.SaveContextCalls.Should().Be(1);
+        result.Success.Should().BeTrue();
+        _stage.SaveCalls.Should().Be(1);
     }
 
     [Fact]
-    public void Decode_RestoreContext_CallsCallback()
+    public void Decode_RestoreContext_CallsCanvasRestore()
     {
         var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
         {
@@ -292,30 +296,32 @@ public class VectorGraphicsDecoderV2Tests
             return offset;
         }, opCount: 2);
 
-        _decoder.Decode(buffer, _callback);
+        var result = _decoder.Decode(buffer);
 
-        _callback.RestoreContextCalls.Should().Be(1);
+        result.Success.Should().BeTrue();
+        _stage.SaveCalls.Should().Be(1);
+        _stage.RestoreCalls.Should().Be(1);
     }
 
     [Fact]
-    public void Decode_ResetContext_CallsCallback()
+    public void Decode_ResetContext_ProcessesWithoutError()
     {
         var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
         {
             return VectorGraphicsEncoderV2.WriteResetContext(ops);
         });
 
-        _decoder.Decode(buffer, _callback);
+        var result = _decoder.Decode(buffer);
 
-        _callback.ResetContextCalls.Should().Be(1);
+        result.Success.Should().BeTrue();
     }
 
     [Fact]
-    public void Decode_SaveAndRestore_PreservesContext()
+    public void Decode_SaveAndRestore_PreservesStroke()
     {
         var points = new SKPoint[] { new(0, 0), new(100, 100) };
 
-        // Test that context is properly saved and restored by checking what is passed to draw calls
+        // Test that context is properly saved and restored
         var buffer = CreateMessageWithOps(frameId: 1, layerId: 0, ops =>
         {
             int offset = 0;
@@ -323,16 +329,16 @@ public class VectorGraphicsDecoderV2Tests
             offset += VectorGraphicsEncoderV2.WriteSaveContext(ops.Slice(offset));
             offset += VectorGraphicsEncoderV2.WriteSetStroke(ops.Slice(offset), new RgbColor(0, 255, 0)); // Green
             offset += VectorGraphicsEncoderV2.WriteRestoreContext(ops.Slice(offset));
-            // Now draw a polygon - it should use the restored red context
+            // Now draw a polygon - it should use the restored red stroke
             offset += VectorGraphicsEncoderV2.WriteDrawPolygon(ops.Slice(offset), points);
             return offset;
         }, opCount: 5);
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        // After restore + draw, the polygon context should have the restored red stroke
-        _callback.LastPolygonContext!.Stroke.R.Should().Be(255);
-        _callback.LastPolygonContext!.Stroke.G.Should().Be(0);
+        // After restore, the polygon should be drawn with the restored red stroke
+        _stage.LastPolygonStroke!.Value.R.Should().Be(255);
+        _stage.LastPolygonStroke!.Value.G.Should().Be(0);
     }
 
     #endregion
@@ -349,22 +355,22 @@ public class VectorGraphicsDecoderV2Tests
             return VectorGraphicsEncoderV2.WriteDrawPolygon(ops, points);
         });
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.DrawPolygonCalls.Should().Be(1);
-        _callback.LastPolygonPoints.Should().HaveCount(4);
-        _callback.LastPolygonPoints![0].X.Should().Be(100);
-        _callback.LastPolygonPoints![0].Y.Should().Be(100);
-        _callback.LastPolygonPoints![1].X.Should().Be(200);
-        _callback.LastPolygonPoints![1].Y.Should().Be(100);
-        _callback.LastPolygonPoints![2].X.Should().Be(200);
-        _callback.LastPolygonPoints![2].Y.Should().Be(200);
-        _callback.LastPolygonPoints![3].X.Should().Be(100);
-        _callback.LastPolygonPoints![3].Y.Should().Be(200);
+        _stage.DrawPolygonCalls.Should().Be(1);
+        _stage.LastPolygonPoints.Should().HaveCount(4);
+        _stage.LastPolygonPoints![0].X.Should().Be(100);
+        _stage.LastPolygonPoints![0].Y.Should().Be(100);
+        _stage.LastPolygonPoints![1].X.Should().Be(200);
+        _stage.LastPolygonPoints![1].Y.Should().Be(100);
+        _stage.LastPolygonPoints![2].X.Should().Be(200);
+        _stage.LastPolygonPoints![2].Y.Should().Be(200);
+        _stage.LastPolygonPoints![3].X.Should().Be(100);
+        _stage.LastPolygonPoints![3].Y.Should().Be(200);
     }
 
     [Fact]
-    public void Decode_DrawPolygon_WithContextStroke_PassesContext()
+    public void Decode_DrawPolygon_WithContextStroke_PassesStroke()
     {
         var points = new SKPoint[] { new(0, 0), new(100, 100) };
 
@@ -376,11 +382,11 @@ public class VectorGraphicsDecoderV2Tests
             return offset;
         }, opCount: 2);
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.LastPolygonContext!.Stroke.R.Should().Be(255);
-        _callback.LastPolygonContext!.Stroke.G.Should().Be(128);
-        _callback.LastPolygonContext!.Stroke.B.Should().Be(64);
+        _stage.LastPolygonStroke!.Value.R.Should().Be(255);
+        _stage.LastPolygonStroke!.Value.G.Should().Be(128);
+        _stage.LastPolygonStroke!.Value.B.Should().Be(64);
     }
 
     [Fact]
@@ -391,12 +397,12 @@ public class VectorGraphicsDecoderV2Tests
             return VectorGraphicsEncoderV2.WriteDrawText(ops, "Hello World", 50, 100);
         });
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.DrawTextCalls.Should().Be(1);
-        _callback.LastText.Should().Be("Hello World");
-        _callback.LastTextX.Should().Be(50);
-        _callback.LastTextY.Should().Be(100);
+        _stage.DrawTextCalls.Should().Be(1);
+        _stage.LastText.Should().Be("Hello World");
+        _stage.LastTextX.Should().Be(50);
+        _stage.LastTextY.Should().Be(100);
     }
 
     [Fact]
@@ -407,9 +413,9 @@ public class VectorGraphicsDecoderV2Tests
             return VectorGraphicsEncoderV2.WriteDrawText(ops, "Caf\u00e9 \u2603", 0, 0);
         });
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.LastText.Should().Be("Caf\u00e9 \u2603");
+        _stage.LastText.Should().Be("Caf\u00e9 \u2603");
     }
 
     [Fact]
@@ -420,12 +426,12 @@ public class VectorGraphicsDecoderV2Tests
             return VectorGraphicsEncoderV2.WriteDrawCircle(ops, 150, 200, 50);
         });
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.DrawCircleCalls.Should().Be(1);
-        _callback.LastCircleCenterX.Should().Be(150);
-        _callback.LastCircleCenterY.Should().Be(200);
-        _callback.LastCircleRadius.Should().Be(50);
+        _stage.DrawCircleCalls.Should().Be(1);
+        _stage.LastCircleCenterX.Should().Be(150);
+        _stage.LastCircleCenterY.Should().Be(200);
+        _stage.LastCircleRadius.Should().Be(50);
     }
 
     [Fact]
@@ -436,13 +442,13 @@ public class VectorGraphicsDecoderV2Tests
             return VectorGraphicsEncoderV2.WriteDrawRect(ops, 10, 20, 100, 50);
         });
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.DrawRectCalls.Should().Be(1);
-        _callback.LastRectX.Should().Be(10);
-        _callback.LastRectY.Should().Be(20);
-        _callback.LastRectWidth.Should().Be(100);
-        _callback.LastRectHeight.Should().Be(50);
+        _stage.DrawRectCalls.Should().Be(1);
+        _stage.LastRectX.Should().Be(10);
+        _stage.LastRectY.Should().Be(20);
+        _stage.LastRectWidth.Should().Be(100);
+        _stage.LastRectHeight.Should().Be(50);
     }
 
     [Fact]
@@ -453,13 +459,13 @@ public class VectorGraphicsDecoderV2Tests
             return VectorGraphicsEncoderV2.WriteDrawLine(ops, 0, 0, 100, 100);
         });
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.DrawLineCalls.Should().Be(1);
-        _callback.LastLineX1.Should().Be(0);
-        _callback.LastLineY1.Should().Be(0);
-        _callback.LastLineX2.Should().Be(100);
-        _callback.LastLineY2.Should().Be(100);
+        _stage.DrawLineCalls.Should().Be(1);
+        _stage.LastLineX1.Should().Be(0);
+        _stage.LastLineY1.Should().Be(0);
+        _stage.LastLineX2.Should().Be(100);
+        _stage.LastLineY2.Should().Be(100);
     }
 
     #endregion
@@ -491,15 +497,15 @@ public class VectorGraphicsDecoderV2Tests
         offset += VectorGraphicsEncoderV2.WriteEndMarker(buffer.AsSpan(offset));
 
         // Decode
-        var result = _decoder.Decode(buffer.AsSpan(0, offset), _callback);
+        var result = _decoder.Decode(buffer.AsSpan(0, offset));
 
         result.Success.Should().BeTrue();
         result.FrameId.Should().Be(42UL);
         result.LayerCount.Should().Be(2);
-        _callback.DrawPolygonCalls.Should().Be(1);
-        _callback.LastPolygonPoints.Should().HaveCount(3);
-        _callback.LastPolygonContext!.Stroke.R.Should().Be(255);
-        _callback.LastPolygonContext!.Thickness.Should().Be(3);
+        _stage.DrawPolygonCalls.Should().Be(1);
+        _stage.LastPolygonPoints.Should().HaveCount(3);
+        _stage.LastPolygonStroke!.Value.R.Should().Be(255);
+        _stage.LastPolygonThickness.Should().Be(3);
     }
 
     [Fact]
@@ -512,12 +518,12 @@ public class VectorGraphicsDecoderV2Tests
             return VectorGraphicsEncoderV2.WriteDrawPolygon(ops, points);
         });
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.LastPolygonPoints![0].X.Should().Be(-100);
-        _callback.LastPolygonPoints![0].Y.Should().Be(-200);
-        _callback.LastPolygonPoints![1].X.Should().Be(100);
-        _callback.LastPolygonPoints![1].Y.Should().Be(200);
+        _stage.LastPolygonPoints![0].X.Should().Be(-100);
+        _stage.LastPolygonPoints![0].Y.Should().Be(-200);
+        _stage.LastPolygonPoints![1].X.Should().Be(100);
+        _stage.LastPolygonPoints![1].Y.Should().Be(200);
     }
 
     [Fact]
@@ -534,13 +540,13 @@ public class VectorGraphicsDecoderV2Tests
             return VectorGraphicsEncoderV2.WriteDrawPolygon(ops, points);
         });
 
-        _decoder.Decode(buffer, _callback);
+        _decoder.Decode(buffer);
 
-        _callback.LastPolygonPoints.Should().HaveCount(100);
+        _stage.LastPolygonPoints.Should().HaveCount(100);
         for (int i = 0; i < 100; i++)
         {
-            _callback.LastPolygonPoints![i].X.Should().Be(i * 10);
-            _callback.LastPolygonPoints![i].Y.Should().Be(i * 5);
+            _stage.LastPolygonPoints![i].X.Should().Be(i * 10);
+            _stage.LastPolygonPoints![i].Y.Should().Be(i * 5);
         }
     }
 
@@ -668,36 +674,118 @@ public class VectorGraphicsDecoderV2Tests
 }
 
 /// <summary>
-/// Test implementation of IDecoderCallbackV2 that captures all callbacks for verification.
+/// Test implementation of IStage that captures all callbacks for verification.
 /// </summary>
-internal class TestDecoderCallback : IDecoderCallbackV2
+internal class TestStage : IStage
 {
+    private readonly Dictionary<byte, TestCanvas> _canvases = new();
+
     public int FrameStartCalls { get; private set; }
     public int FrameEndCalls { get; private set; }
-    public int LayerStartCalls { get; private set; }
-    public int LayerEndCalls { get; private set; }
-    public int SetContextCalls { get; private set; }
-    public int SaveContextCalls { get; private set; }
-    public int RestoreContextCalls { get; private set; }
-    public int ResetContextCalls { get; private set; }
+    public int ClearLayerCalls { get; private set; }
+
+    public ulong LastFrameId { get; private set; }
+    public byte LastClearedLayerId { get; private set; }
+
+    // Aggregate properties from canvases
+    public int DrawPolygonCalls => _canvases.Values.Sum(c => c.DrawPolygonCalls);
+    public int DrawTextCalls => _canvases.Values.Sum(c => c.DrawTextCalls);
+    public int DrawCircleCalls => _canvases.Values.Sum(c => c.DrawCircleCalls);
+    public int DrawRectCalls => _canvases.Values.Sum(c => c.DrawRectCalls);
+    public int DrawLineCalls => _canvases.Values.Sum(c => c.DrawLineCalls);
+    public int SaveCalls => _canvases.Values.Sum(c => c.SaveCalls);
+    public int RestoreCalls => _canvases.Values.Sum(c => c.RestoreCalls);
+    public int SetMatrixCalls => _canvases.Values.Sum(c => c.SetMatrixCalls);
+
+    // Last values from any canvas
+    public SKPoint[]? LastPolygonPoints => _canvases.Values.LastOrDefault(c => c.LastPolygonPoints != null)?.LastPolygonPoints;
+    public RgbColor? LastPolygonStroke => _canvases.Values.LastOrDefault(c => c.LastPolygonStroke.HasValue)?.LastPolygonStroke;
+    public int? LastPolygonThickness => _canvases.Values.LastOrDefault(c => c.LastPolygonThickness.HasValue)?.LastPolygonThickness;
+    public string? LastText => _canvases.Values.LastOrDefault(c => c.LastText != null)?.LastText;
+    public int LastTextX => _canvases.Values.LastOrDefault(c => c.LastText != null)?.LastTextX ?? 0;
+    public int LastTextY => _canvases.Values.LastOrDefault(c => c.LastText != null)?.LastTextY ?? 0;
+    public int LastCircleCenterX => _canvases.Values.LastOrDefault(c => c.DrawCircleCalls > 0)?.LastCircleCenterX ?? 0;
+    public int LastCircleCenterY => _canvases.Values.LastOrDefault(c => c.DrawCircleCalls > 0)?.LastCircleCenterY ?? 0;
+    public int LastCircleRadius => _canvases.Values.LastOrDefault(c => c.DrawCircleCalls > 0)?.LastCircleRadius ?? 0;
+    public int LastRectX => _canvases.Values.LastOrDefault(c => c.DrawRectCalls > 0)?.LastRectX ?? 0;
+    public int LastRectY => _canvases.Values.LastOrDefault(c => c.DrawRectCalls > 0)?.LastRectY ?? 0;
+    public int LastRectWidth => _canvases.Values.LastOrDefault(c => c.DrawRectCalls > 0)?.LastRectWidth ?? 0;
+    public int LastRectHeight => _canvases.Values.LastOrDefault(c => c.DrawRectCalls > 0)?.LastRectHeight ?? 0;
+    public int LastLineX1 => _canvases.Values.LastOrDefault(c => c.DrawLineCalls > 0)?.LastLineX1 ?? 0;
+    public int LastLineY1 => _canvases.Values.LastOrDefault(c => c.DrawLineCalls > 0)?.LastLineY1 ?? 0;
+    public int LastLineX2 => _canvases.Values.LastOrDefault(c => c.DrawLineCalls > 0)?.LastLineX2 ?? 0;
+    public int LastLineY2 => _canvases.Values.LastOrDefault(c => c.DrawLineCalls > 0)?.LastLineY2 ?? 0;
+    public SKMatrix LastMatrix => _canvases.Values.LastOrDefault(c => c.SetMatrixCalls > 0)?.LastMatrix ?? SKMatrix.Identity;
+
+    public ICanvas this[byte layerId]
+    {
+        get
+        {
+            if (!_canvases.TryGetValue(layerId, out var canvas))
+            {
+                canvas = new TestCanvas();
+                _canvases[layerId] = canvas;
+            }
+            return canvas;
+        }
+    }
+
+    public TestCanvas GetCanvas(byte layerId) => (TestCanvas)this[layerId];
+
+    public void OnFrameStart(ulong frameId)
+    {
+        FrameStartCalls++;
+        LastFrameId = frameId;
+    }
+
+    public void OnFrameEnd()
+    {
+        FrameEndCalls++;
+    }
+
+    public void Clear(byte layerId)
+    {
+        ClearLayerCalls++;
+        LastClearedLayerId = layerId;
+    }
+
+    public void Remain(byte layerId)
+    {
+        // Test stub - capture that Remain was called
+    }
+
+    public bool TryCopyFrame(out global::BlazorBlaze.ValueTypes.RefArray<global::BlazorBlaze.ValueTypes.Lease<global::BlazorBlaze.VectorGraphics.Protocol.ILayer>>? copy)
+    {
+        // Test stub - not needed for decoder tests
+        copy = null;
+        return false;
+    }
+}
+
+/// <summary>
+/// Test implementation of ICanvas that captures all calls for verification.
+/// </summary>
+internal class TestCanvas : ICanvas
+{
+    public int SaveCalls { get; private set; }
+    public int RestoreCalls { get; private set; }
+    public int SetMatrixCalls { get; private set; }
     public int DrawPolygonCalls { get; private set; }
     public int DrawTextCalls { get; private set; }
     public int DrawCircleCalls { get; private set; }
     public int DrawRectCalls { get; private set; }
     public int DrawLineCalls { get; private set; }
 
-    public ulong LastFrameId { get; private set; }
-    public byte LastLayerCount { get; private set; }
-    public byte LastLayerId { get; private set; }
-    public FrameType LastFrameType { get; private set; }
-
-    public LayerContext? LastContext { get; private set; }
+    public SKMatrix LastMatrix { get; private set; }
     public SKPoint[]? LastPolygonPoints { get; private set; }
-    public LayerContext? LastPolygonContext { get; private set; }
+    public RgbColor? LastPolygonStroke { get; private set; }
+    public int? LastPolygonThickness { get; private set; }
 
     public string? LastText { get; private set; }
     public int LastTextX { get; private set; }
     public int LastTextY { get; private set; }
+    public RgbColor? LastTextColor { get; private set; }
+    public int? LastTextFontSize { get; private set; }
 
     public int LastCircleCenterX { get; private set; }
     public int LastCircleCenterY { get; private set; }
@@ -713,67 +801,35 @@ internal class TestDecoderCallback : IDecoderCallbackV2
     public int LastLineX2 { get; private set; }
     public int LastLineY2 { get; private set; }
 
-    public void OnFrameStart(ulong frameId, byte layerCount)
+    public void Save() => SaveCalls++;
+
+    public void Restore() => RestoreCalls++;
+
+    public void SetMatrix(SKMatrix matrix)
     {
-        FrameStartCalls++;
-        LastFrameId = frameId;
-        LastLayerCount = layerCount;
+        SetMatrixCalls++;
+        LastMatrix = matrix;
     }
 
-    public void OnLayerStart(byte layerId, FrameType frameType)
-    {
-        LayerStartCalls++;
-        LastLayerId = layerId;
-        LastFrameType = frameType;
-    }
-
-    public void OnLayerEnd(byte layerId)
-    {
-        LayerEndCalls++;
-    }
-
-    public void OnFrameEnd()
-    {
-        FrameEndCalls++;
-    }
-
-    public void OnSetContext(byte layerId, LayerContext context)
-    {
-        SetContextCalls++;
-        LastContext = CloneContext(context);
-    }
-
-    public void OnSaveContext(byte layerId)
-    {
-        SaveContextCalls++;
-    }
-
-    public void OnRestoreContext(byte layerId)
-    {
-        RestoreContextCalls++;
-    }
-
-    public void OnResetContext(byte layerId)
-    {
-        ResetContextCalls++;
-    }
-
-    public void OnDrawPolygon(byte layerId, ReadOnlySpan<SKPoint> points, LayerContext context)
+    public void DrawPolygon(ReadOnlySpan<SKPoint> points, RgbColor stroke, int thickness)
     {
         DrawPolygonCalls++;
         LastPolygonPoints = points.ToArray();
-        LastPolygonContext = CloneContext(context);
+        LastPolygonStroke = stroke;
+        LastPolygonThickness = thickness;
     }
 
-    public void OnDrawText(byte layerId, string text, int x, int y, LayerContext context)
+    public void DrawText(string text, int x, int y, RgbColor color, int fontSize)
     {
         DrawTextCalls++;
         LastText = text;
         LastTextX = x;
         LastTextY = y;
+        LastTextColor = color;
+        LastTextFontSize = fontSize;
     }
 
-    public void OnDrawCircle(byte layerId, int centerX, int centerY, int radius, LayerContext context)
+    public void DrawCircle(int centerX, int centerY, int radius, RgbColor stroke, int thickness)
     {
         DrawCircleCalls++;
         LastCircleCenterX = centerX;
@@ -781,7 +837,7 @@ internal class TestDecoderCallback : IDecoderCallbackV2
         LastCircleRadius = radius;
     }
 
-    public void OnDrawRect(byte layerId, int x, int y, int width, int height, LayerContext context)
+    public void DrawRect(int x, int y, int width, int height, RgbColor stroke, int thickness)
     {
         DrawRectCalls++;
         LastRectX = x;
@@ -790,7 +846,7 @@ internal class TestDecoderCallback : IDecoderCallbackV2
         LastRectHeight = height;
     }
 
-    public void OnDrawLine(byte layerId, int x1, int y1, int x2, int y2, LayerContext context)
+    public void DrawLine(int x1, int y1, int x2, int y2, RgbColor stroke, int thickness)
     {
         DrawLineCalls++;
         LastLineX1 = x1;
@@ -798,18 +854,4 @@ internal class TestDecoderCallback : IDecoderCallbackV2
         LastLineX2 = x2;
         LastLineY2 = y2;
     }
-
-    private static LayerContext CloneContext(LayerContext ctx) => new()
-    {
-        Stroke = ctx.Stroke,
-        Fill = ctx.Fill,
-        Thickness = ctx.Thickness,
-        FontSize = ctx.FontSize,
-        FontColor = ctx.FontColor,
-        Offset = ctx.Offset,
-        Rotation = ctx.Rotation,
-        Scale = ctx.Scale,
-        Skew = ctx.Skew,
-        Matrix = ctx.Matrix
-    };
 }

@@ -1,5 +1,9 @@
 # BlazorBlaze - Claude Code Context
 
+## CRITICAL RULES
+
+**Do NOT change the design if tests fail. Always ask for input from the user!**
+
 ## Quick Start
 
 ```bash
@@ -33,6 +37,35 @@ Opens at `http://localhost:5100`
 - Client: `VectorGraphicsDecoder` decodes and renders
 - Binary protocol with transformation matrix support (Rotation, Scale, Skew, Offset)
 - Demo: `/stress` (20K polygons @ 60 FPS)
+
+## VectorGraphics Protocol V2 Design Rules
+
+**CRITICAL: The protocol and callback interface MUST mimic SKCanvas methods.**
+
+The `IDecoderCallbackV2` interface mirrors SKCanvas:
+- `Save(layerId)` - calls `canvas.Save()`
+- `Restore(layerId)` - calls `canvas.Restore()`
+- `SetMatrix(layerId, matrix)` - calls `canvas.SetMatrix(matrix)`
+- `DrawPolygon(...)`, `DrawText(...)`, etc. - just draw, NO transform logic
+
+**Architecture:**
+1. **Decoder** parses binary protocol, calls callback methods
+2. **Callback** (RenderingCallbackV2) applies operations to layer canvas
+3. **Draw methods in callback do NOT handle transforms** - canvas already has matrix set
+
+**Transform flow:**
+```
+Protocol: SetContext(Offset=50,50) → Decoder calls callback.SetMatrix(layerId, matrix)
+Protocol: DrawPolygon(points)      → Decoder calls callback.DrawPolygon(layerId, points, context)
+                                     Callback just draws - canvas matrix already set
+```
+
+**DO NOT:**
+- Add matrix checks in draw methods
+- Call canvas.Save()/Restore() in draw methods
+- Manually map points through matrices in draw methods
+
+**The callback's draw methods should be 3-5 lines: get canvas, get paint, draw.**
 
 ## Testing with MCP Playwright
 

@@ -27,132 +27,121 @@ public readonly struct DecodeResultV2
 
 /// <summary>
 /// Per-layer context state maintained during decoding.
+/// Uses pre-allocated stack to avoid allocations on Save/Restore.
 /// </summary>
 public class LayerContext
 {
-    public RgbColor Stroke { get; set; } = RgbColor.Black;
-    public RgbColor Fill { get; set; } = RgbColor.Transparent;
-    public int Thickness { get; set; } = 1;
-    public int FontSize { get; set; } = 12;
-    public RgbColor FontColor { get; set; } = RgbColor.Black;
-    public SKPoint Offset { get; set; } = SKPoint.Empty;
-    public float Rotation { get; set; } = 0;
-    public SKPoint Scale { get; set; } = new(1, 1);
-    public SKPoint Skew { get; set; } = SKPoint.Empty;
-    public SKMatrix? Matrix { get; set; }
+    private const int MaxStackDepth = 16;
 
-    private readonly Stack<LayerContext> _savedStates = new();
+    /// <summary>
+    /// Value type containing all context state properties.
+    /// </summary>
+    public record struct State
+    {
+        public RgbColor Stroke;
+        public RgbColor Fill;
+        public int Thickness;
+        public int FontSize;
+        public RgbColor FontColor;
+        public SKPoint Offset;
+        public float Rotation;
+        public SKPoint Scale;
+        public SKPoint Skew;
+        public SKMatrix? Matrix;
+
+        public static State Default => new()
+        {
+            Stroke = RgbColor.Black,
+            Fill = RgbColor.Transparent,
+            Thickness = 1,
+            FontSize = 12,
+            FontColor = RgbColor.Black,
+            Offset = SKPoint.Empty,
+            Rotation = 0,
+            Scale = new SKPoint(1, 1),
+            Skew = SKPoint.Empty,
+            Matrix = null
+        };
+
+        /// <summary>
+        /// Builds the combined transformation matrix from individual transform properties.
+        /// Transform order: translate to position, then rotate/scale/skew locally around that point.
+        /// This is achieved by: Translate * Rotate * Scale * Skew (applied right-to-left).
+        /// </summary>
+        public readonly SKMatrix GetTransformMatrix()
+        {
+            if (Matrix.HasValue)
+                return Matrix.Value;
+
+            var result = SKMatrix.Identity;
+
+            // Apply transforms in order: scale, skew, rotate (local transforms first), then translate
+            // This results in objects being transformed locally, then moved to their final position
+            if (Scale.X != 1 || Scale.Y != 1)
+                result = result.PostConcat(SKMatrix.CreateScale(Scale.X, Scale.Y));
+
+            if (Skew.X != 0 || Skew.Y != 0)
+                result = result.PostConcat(SKMatrix.CreateSkew(Skew.X, Skew.Y));
+
+            if (Rotation != 0)
+                result = result.PostConcat(SKMatrix.CreateRotationDegrees(Rotation));
+
+            if (Offset != SKPoint.Empty)
+                result = result.PostConcat(SKMatrix.CreateTranslation(Offset.X, Offset.Y));
+
+            return result;
+        }
+    }
+
+    private readonly State[] _stateStack = new State[MaxStackDepth];
+    private int _stackDepth;
+    private State _current = State.Default;
+
+    // Properties delegate to current state
+    public RgbColor Stroke { get => _current.Stroke; set => _current.Stroke = value; }
+    public RgbColor Fill { get => _current.Fill; set => _current.Fill = value; }
+    public int Thickness { get => _current.Thickness; set => _current.Thickness = value; }
+    public int FontSize { get => _current.FontSize; set => _current.FontSize = value; }
+    public RgbColor FontColor { get => _current.FontColor; set => _current.FontColor = value; }
+    public SKPoint Offset { get => _current.Offset; set => _current.Offset = value; }
+    public float Rotation { get => _current.Rotation; set => _current.Rotation = value; }
+    public SKPoint Scale { get => _current.Scale; set => _current.Scale = value; }
+    public SKPoint Skew { get => _current.Skew; set => _current.Skew = value; }
+    public SKMatrix? Matrix { get => _current.Matrix; set => _current.Matrix = value; }
 
     public void Save()
     {
-        _savedStates.Push(Clone());
+        if (_stackDepth < MaxStackDepth)
+        {
+            _stateStack[_stackDepth++] = _current;
+        }
     }
 
     public void Restore()
     {
-        if (_savedStates.Count > 0)
+        if (_stackDepth > 0)
         {
-            var saved = _savedStates.Pop();
-            CopyFrom(saved);
+            _current = _stateStack[--_stackDepth];
         }
     }
 
     public void Reset()
     {
-        Stroke = RgbColor.Black;
-        Fill = RgbColor.Transparent;
-        Thickness = 1;
-        FontSize = 12;
-        FontColor = RgbColor.Black;
-        Offset = SKPoint.Empty;
-        Rotation = 0;
-        Scale = new SKPoint(1, 1);
-        Skew = SKPoint.Empty;
-        Matrix = null;
-        _savedStates.Clear();
-    }
-
-    private LayerContext Clone() => new()
-    {
-        Stroke = Stroke,
-        Fill = Fill,
-        Thickness = Thickness,
-        FontSize = FontSize,
-        FontColor = FontColor,
-        Offset = Offset,
-        Rotation = Rotation,
-        Scale = Scale,
-        Skew = Skew,
-        Matrix = Matrix
-    };
-
-    private void CopyFrom(LayerContext other)
-    {
-        Stroke = other.Stroke;
-        Fill = other.Fill;
-        Thickness = other.Thickness;
-        FontSize = other.FontSize;
-        FontColor = other.FontColor;
-        Offset = other.Offset;
-        Rotation = other.Rotation;
-        Scale = other.Scale;
-        Skew = other.Skew;
-        Matrix = other.Matrix;
+        _current = State.Default;
+        _stackDepth = 0;
     }
 
     /// <summary>
     /// Builds the combined transformation matrix from individual transform properties.
     /// </summary>
-    public SKMatrix GetTransformMatrix()
-    {
-        if (Matrix.HasValue)
-            return Matrix.Value;
-
-        var result = SKMatrix.Identity;
-
-        // Apply transforms in order: translate, rotate, scale, skew
-        if (Offset != SKPoint.Empty)
-            result = result.PostConcat(SKMatrix.CreateTranslation(Offset.X, Offset.Y));
-
-        if (Rotation != 0)
-            result = result.PostConcat(SKMatrix.CreateRotationDegrees(Rotation));
-
-        if (Scale.X != 1 || Scale.Y != 1)
-            result = result.PostConcat(SKMatrix.CreateScale(Scale.X, Scale.Y));
-
-        if (Skew.X != 0 || Skew.Y != 0)
-            result = result.PostConcat(SKMatrix.CreateSkew(Skew.X, Skew.Y));
-
-        return result;
-    }
+    public SKMatrix GetTransformMatrix() => _current.GetTransformMatrix();
 }
 
-/// <summary>
-/// Callback interface for decoder to notify about decoded operations.
-/// </summary>
-public interface IDecoderCallbackV2
-{
-    void OnFrameStart(ulong frameId, byte layerCount);
-    void OnLayerStart(byte layerId, FrameType frameType);
-    void OnLayerEnd(byte layerId);
-    void OnFrameEnd();
-
-    void OnSetContext(byte layerId, LayerContext context);
-    void OnSaveContext(byte layerId);
-    void OnRestoreContext(byte layerId);
-    void OnResetContext(byte layerId);
-
-    void OnDrawPolygon(byte layerId, ReadOnlySpan<SKPoint> points, LayerContext context);
-    void OnDrawText(byte layerId, string text, int x, int y, LayerContext context);
-    void OnDrawCircle(byte layerId, int centerX, int centerY, int radius, LayerContext context);
-    void OnDrawRect(byte layerId, int x, int y, int width, int height, LayerContext context);
-    void OnDrawLine(byte layerId, int x1, int y1, int x2, int y2, LayerContext context);
-}
 
 /// <summary>
 /// Protocol v2 decoder for stateful canvas API with multi-layer support.
 /// </summary>
-public class VectorGraphicsDecoderV2
+public class VectorGraphicsDecoderV2(IStage stage)
 {
     private const int MinMessageSize = 9 + 2; // Header (9) + EndMarker (2)
 
@@ -184,7 +173,7 @@ public class VectorGraphicsDecoderV2
     /// <summary>
     /// Decodes a complete message from the buffer.
     /// </summary>
-    public DecodeResultV2 Decode(ReadOnlySpan<byte> buffer, IDecoderCallbackV2 callback)
+    public DecodeResultV2 Decode(ReadOnlySpan<byte> buffer)
     {
         if (buffer.Length < MinMessageSize)
             return DecodeResultV2.NeedMoreData;
@@ -196,7 +185,7 @@ public class VectorGraphicsDecoderV2
         offset += 8;
         byte layerCount = buffer[offset++];
 
-        callback.OnFrameStart(frameId, layerCount);
+        stage.OnFrameStart(frameId);
 
         // Read layer blocks
         for (int i = 0; i < layerCount; i++)
@@ -206,18 +195,28 @@ public class VectorGraphicsDecoderV2
 
             byte layerId = buffer[offset++];
             var frameType = (FrameType)buffer[offset++];
+            var context = GetLayerContext(layerId);
 
-            callback.OnLayerStart(layerId, frameType);
+            // Handle frame type - must be called before accessing canvas
+            if (frameType == FrameType.Master || frameType == FrameType.Clear)
+            {
+                stage.Clear(layerId);
+            }
+            else if (frameType == FrameType.Remain)
+            {
+                stage.Remain(layerId);
+            }
 
             if (frameType == FrameType.Master)
             {
+                // Get canvas after Clear/Remain has set up the layer
+                var canvas = stage[layerId];
+
                 // Read operation count
                 int consumed = BinaryEncoding.ReadVarint(buffer.Slice(offset), out uint opCount);
                 if (consumed == 0)
                     return DecodeResultV2.NeedMoreData;
                 offset += consumed;
-
-                var context = GetLayerContext(layerId);
 
                 // Read operations
                 for (uint op = 0; op < opCount; op++)
@@ -225,15 +224,13 @@ public class VectorGraphicsDecoderV2
                     if (offset >= buffer.Length)
                         return DecodeResultV2.NeedMoreData;
 
-                    consumed = DecodeOperation(buffer.Slice(offset), layerId, context, callback);
+                    consumed = DecodeOperation(buffer.Slice(offset), canvas, context);
                     if (consumed == 0)
                         return DecodeResultV2.NeedMoreData;
                     offset += consumed;
                 }
             }
             // Remain and Clear have no additional data
-
-            callback.OnLayerEnd(layerId);
         }
 
         // Verify end marker
@@ -245,15 +242,15 @@ public class VectorGraphicsDecoderV2
 
         offset += 2;
 
-        callback.OnFrameEnd();
+        stage.OnFrameEnd();
 
         return DecodeResultV2.Ok(offset, frameId, layerCount);
     }
 
     /// <summary>
-    /// Decodes a single operation.
+    /// Decodes a single operation. Context operations are handled internally by the decoder.
     /// </summary>
-    private int DecodeOperation(ReadOnlySpan<byte> buffer, byte layerId, LayerContext context, IDecoderCallbackV2 callback)
+    private int DecodeOperation(ReadOnlySpan<byte> buffer, ICanvas canvas, LayerContext context)
     {
         if (buffer.IsEmpty)
             return 0;
@@ -264,42 +261,43 @@ public class VectorGraphicsDecoderV2
         switch (opType)
         {
             case OpType.SetContext:
-                offset += DecodeSetContext(buffer.Slice(offset), layerId, context, callback);
+                offset += DecodeSetContext(buffer.Slice(offset), canvas, context);
                 break;
 
             case OpType.SaveContext:
                 context.Save();
-                callback.OnSaveContext(layerId);
+                canvas.Save();
                 break;
 
             case OpType.RestoreContext:
                 context.Restore();
-                callback.OnRestoreContext(layerId);
+                canvas.Restore();
+                canvas.SetMatrix(context.GetTransformMatrix());
                 break;
 
             case OpType.ResetContext:
                 context.Reset();
-                callback.OnResetContext(layerId);
+                canvas.SetMatrix(SKMatrix.Identity);
                 break;
 
             case OpType.DrawPolygon:
-                offset += DecodeDrawPolygon(buffer.Slice(offset), layerId, context, callback);
+                offset += DecodeDrawPolygon(buffer.Slice(offset), canvas, context);
                 break;
 
             case OpType.DrawText:
-                offset += DecodeDrawText(buffer.Slice(offset), layerId, context, callback);
+                offset += DecodeDrawText(buffer.Slice(offset), canvas, context);
                 break;
 
             case OpType.DrawCircle:
-                offset += DecodeDrawCircle(buffer.Slice(offset), layerId, context, callback);
+                offset += DecodeDrawCircle(buffer.Slice(offset), canvas, context);
                 break;
 
             case OpType.DrawRect:
-                offset += DecodeDrawRect(buffer.Slice(offset), layerId, context, callback);
+                offset += DecodeDrawRect(buffer.Slice(offset), canvas, context);
                 break;
 
             case OpType.DrawLine:
-                offset += DecodeDrawLine(buffer.Slice(offset), layerId, context, callback);
+                offset += DecodeDrawLine(buffer.Slice(offset), canvas, context);
                 break;
 
             default:
@@ -309,7 +307,7 @@ public class VectorGraphicsDecoderV2
         return offset;
     }
 
-    private int DecodeSetContext(ReadOnlySpan<byte> buffer, byte layerId, LayerContext context, IDecoderCallbackV2 callback)
+    private int DecodeSetContext(ReadOnlySpan<byte> buffer, ICanvas canvas, LayerContext context)
     {
         int offset = 0;
 
@@ -324,7 +322,9 @@ public class VectorGraphicsDecoderV2
             offset += consumed;
         }
 
-        callback.OnSetContext(layerId, context);
+        // After setting context properties, update canvas matrix
+        canvas.SetMatrix(context.GetTransformMatrix());
+
         return offset;
     }
 
@@ -421,7 +421,7 @@ public class VectorGraphicsDecoderV2
         return offset;
     }
 
-    private int DecodeDrawPolygon(ReadOnlySpan<byte> buffer, byte layerId, LayerContext context, IDecoderCallbackV2 callback)
+    private int DecodeDrawPolygon(ReadOnlySpan<byte> buffer, ICanvas canvas, LayerContext context)
     {
         int offset = 0;
 
@@ -465,11 +465,11 @@ public class VectorGraphicsDecoderV2
             }
         }
 
-        callback.OnDrawPolygon(layerId, _pointBuffer.AsSpan(0, (int)pointCount), context);
+        canvas.DrawPolygon(_pointBuffer.AsSpan(0, (int)pointCount), context.Stroke, context.Thickness);
         return offset;
     }
 
-    private int DecodeDrawText(ReadOnlySpan<byte> buffer, byte layerId, LayerContext context, IDecoderCallbackV2 callback)
+    private int DecodeDrawText(ReadOnlySpan<byte> buffer, ICanvas canvas, LayerContext context)
     {
         int offset = 0;
 
@@ -490,11 +490,11 @@ public class VectorGraphicsDecoderV2
         string text = System.Text.Encoding.UTF8.GetString(buffer.Slice(offset, (int)textLength));
         offset += (int)textLength;
 
-        callback.OnDrawText(layerId, text, x, y, context);
+        canvas.DrawText(text, x, y, context.FontColor, context.FontSize);
         return offset;
     }
 
-    private int DecodeDrawCircle(ReadOnlySpan<byte> buffer, byte layerId, LayerContext context, IDecoderCallbackV2 callback)
+    private int DecodeDrawCircle(ReadOnlySpan<byte> buffer, ICanvas canvas, LayerContext context)
     {
         int offset = 0;
 
@@ -510,11 +510,11 @@ public class VectorGraphicsDecoderV2
         if (consumed == 0) return 0;
         offset += consumed;
 
-        callback.OnDrawCircle(layerId, centerX, centerY, (int)radius, context);
+        canvas.DrawCircle(centerX, centerY, (int)radius, context.Stroke, context.Thickness);
         return offset;
     }
 
-    private int DecodeDrawRect(ReadOnlySpan<byte> buffer, byte layerId, LayerContext context, IDecoderCallbackV2 callback)
+    private int DecodeDrawRect(ReadOnlySpan<byte> buffer, ICanvas canvas, LayerContext context)
     {
         int offset = 0;
 
@@ -534,11 +534,11 @@ public class VectorGraphicsDecoderV2
         if (consumed == 0) return 0;
         offset += consumed;
 
-        callback.OnDrawRect(layerId, x, y, (int)width, (int)height, context);
+        canvas.DrawRect(x, y, (int)width, (int)height, context.Stroke, context.Thickness);
         return offset;
     }
 
-    private int DecodeDrawLine(ReadOnlySpan<byte> buffer, byte layerId, LayerContext context, IDecoderCallbackV2 callback)
+    private int DecodeDrawLine(ReadOnlySpan<byte> buffer, ICanvas canvas, LayerContext context)
     {
         int offset = 0;
 
@@ -558,7 +558,7 @@ public class VectorGraphicsDecoderV2
         if (consumed == 0) return 0;
         offset += consumed;
 
-        callback.OnDrawLine(layerId, x1, y1, x2, y2, context);
+        canvas.DrawLine(x1, y1, x2, y2, context.Stroke, context.Thickness);
         return offset;
     }
 }

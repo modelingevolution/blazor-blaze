@@ -12,19 +12,22 @@ namespace BlazorBlaze.Server;
 public static class VectorGraphicsEndpointExtensions
 {
     /// <summary>
-    /// Maps a WebSocket endpoint for streaming vector graphics using Protocol v1 (legacy).
-    /// The handler delegate can accept IRemoteCanvas and CancellationToken as special parameters,
+    /// Maps a WebSocket endpoint for streaming vector graphics using Protocol v2 (multi-layer, stateful context).
+    /// The handler delegate can accept IRemoteCanvasV2 and CancellationToken as special parameters,
     /// plus any DI-resolved services.
     /// </summary>
     /// <param name="app">The WebApplication.</param>
     /// <param name="pattern">The URL pattern (e.g., "/ws/graphics").</param>
-    /// <param name="handler">The handler delegate. Can accept IRemoteCanvas, CancellationToken, and DI services.</param>
+    /// <param name="handler">The handler delegate. Can accept IRemoteCanvasV2, CancellationToken, and DI services.</param>
     /// <returns>The WebApplication for chaining.</returns>
     /// <example>
-    /// app.MapVectorGraphicsEndpoint("/ws/demo", async (IRemoteCanvas canvas, IMyService svc, CancellationToken ct) =>
+    /// app.MapVectorGraphicsEndpoint("/ws/demo", async (IRemoteCanvasV2 canvas, CancellationToken ct) =>
     /// {
-    ///     canvas.Begin();
-    ///     canvas.DrawCircle(100, 100, 50);
+    ///     canvas.BeginFrame();
+    ///     var layer = canvas.Layer(0);
+    ///     layer.Master();
+    ///     layer.SetStroke(RgbColor.Red);
+    ///     layer.DrawCircle(100, 100, 50);
     ///     await canvas.FlushAsync(ct);
     /// });
     /// </example>
@@ -44,65 +47,9 @@ public static class VectorGraphicsEndpointExtensions
             }
 
             using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-            using var canvas = new WebSocketRemoteCanvas(webSocket);
-
-            var args = ResolveParameters(parameterInfo, context, canvas, null);
-
-            var result = handler.DynamicInvoke(args);
-
-            // If handler returns Task or ValueTask, await it
-            if (result is Task task)
-            {
-                await task;
-            }
-            else if (result is ValueTask valueTask)
-            {
-                await valueTask;
-            }
-        });
-
-        return app;
-    }
-
-    /// <summary>
-    /// Maps a WebSocket endpoint for streaming vector graphics using Protocol v2 (multi-layer, stateful context).
-    /// The handler delegate can accept IRemoteCanvasV2 and CancellationToken as special parameters,
-    /// plus any DI-resolved services.
-    /// </summary>
-    /// <param name="app">The WebApplication.</param>
-    /// <param name="pattern">The URL pattern (e.g., "/ws/graphics-v2").</param>
-    /// <param name="handler">The handler delegate. Can accept IRemoteCanvasV2, CancellationToken, and DI services.</param>
-    /// <returns>The WebApplication for chaining.</returns>
-    /// <example>
-    /// app.MapVectorGraphicsEndpointV2("/ws/demo", async (IRemoteCanvasV2 canvas, CancellationToken ct) =>
-    /// {
-    ///     canvas.BeginFrame();
-    ///     var layer = canvas.Layer(0);
-    ///     layer.Master();
-    ///     layer.SetStroke(RgbColor.Red);
-    ///     layer.DrawCircle(100, 100, 50);
-    ///     await canvas.FlushAsync(ct);
-    /// });
-    /// </example>
-    public static WebApplication MapVectorGraphicsEndpointV2(
-        this WebApplication app,
-        string pattern,
-        Delegate handler)
-    {
-        var parameterInfo = CreateParameterInfo(handler);
-
-        app.Map(pattern, async context =>
-        {
-            if (!context.WebSockets.IsWebSocketRequest)
-            {
-                context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                return;
-            }
-
-            using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
             using var canvas = new WebSocketRemoteCanvasV2(webSocket);
 
-            var args = ResolveParameters(parameterInfo, context, null, canvas);
+            var args = ResolveParameters(parameterInfo, context, canvas);
 
             var result = handler.DynamicInvoke(args);
 
@@ -129,7 +76,6 @@ public static class VectorGraphicsEndpointExtensions
 
     private enum ParameterSource
     {
-        RemoteCanvas,
         RemoteCanvasV2,
         CancellationToken,
         HttpContext,
@@ -161,9 +107,6 @@ public static class VectorGraphicsEndpointExtensions
 
     private static ParameterSource DetermineSource(Type type)
     {
-        if (type == typeof(IRemoteCanvas) || type == typeof(WebSocketRemoteCanvas))
-            return ParameterSource.RemoteCanvas;
-
         if (type == typeof(IRemoteCanvasV2) || type == typeof(WebSocketRemoteCanvasV2))
             return ParameterSource.RemoteCanvasV2;
 
@@ -182,8 +125,7 @@ public static class VectorGraphicsEndpointExtensions
     private static object?[] ResolveParameters(
         ParameterBinding[] bindings,
         HttpContext context,
-        IRemoteCanvas? canvasV1,
-        IRemoteCanvasV2? canvasV2)
+        IRemoteCanvasV2 canvas)
     {
         var args = new object?[bindings.Length];
 
@@ -192,11 +134,10 @@ public static class VectorGraphicsEndpointExtensions
             var binding = bindings[i];
             args[i] = binding.Source switch
             {
-                ParameterSource.RemoteCanvas => canvasV1,
-                ParameterSource.RemoteCanvasV2 => canvasV2,
+                ParameterSource.RemoteCanvasV2 => canvas,
                 ParameterSource.CancellationToken => context.RequestAborted,
                 ParameterSource.HttpContext => context,
-                ParameterSource.WebSocket => GetWebSocket(canvasV1, canvasV2),
+                ParameterSource.WebSocket => GetWebSocket(canvas),
                 ParameterSource.DependencyInjection => context.RequestServices.GetRequiredService(binding.ParameterType),
                 _ => throw new InvalidOperationException($"Unknown parameter source for {binding.Name}")
             };
@@ -205,16 +146,9 @@ public static class VectorGraphicsEndpointExtensions
         return args;
     }
 
-    private static WebSocket? GetWebSocket(IRemoteCanvas? canvasV1, IRemoteCanvasV2? canvasV2)
+    private static WebSocket? GetWebSocket(IRemoteCanvasV2 canvas)
     {
-        if (canvasV1 is WebSocketRemoteCanvas wsV1)
-        {
-            return wsV1.GetType()
-                .GetField("_webSocket", BindingFlags.NonPublic | BindingFlags.Instance)
-                ?.GetValue(wsV1) as WebSocket;
-        }
-
-        if (canvasV2 is WebSocketRemoteCanvasV2 wsV2)
+        if (canvas is WebSocketRemoteCanvasV2 wsV2)
         {
             return wsV2.GetType()
                 .GetField("_webSocket", BindingFlags.NonPublic | BindingFlags.Instance)
