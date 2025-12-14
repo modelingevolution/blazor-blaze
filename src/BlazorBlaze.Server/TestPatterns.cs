@@ -66,10 +66,10 @@ public static class TestPatterns
             if (x - radius <= 0 || x + radius >= width) dx = -dx;
             if (y - radius <= 0 || y + radius >= height) dy = -dy;
 
+            await canvas.FlushAsync(ct);
+
             if (!await timer.WaitForNextTickAsync(ct))
                 break;
-
-            await canvas.FlushAsync(ct);
         }
     }
 

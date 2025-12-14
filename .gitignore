@@ -45,3 +45,7 @@ test-results/
 # Sample app build artifacts
 publish/
 server.log
+
+# Test videos (generated locally)
+*.mp4
+**/videos/
