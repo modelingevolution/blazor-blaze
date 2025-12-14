@@ -12,6 +12,33 @@ namespace BlazorBlaze.Server;
 public static class VectorGraphicsEndpointExtensions
 {
     /// <summary>
+    /// Maps a WebSocket endpoint using a built-in test pattern.
+    /// </summary>
+    /// <param name="app">The WebApplication.</param>
+    /// <param name="pattern">The URL pattern (e.g., "/ws/test").</param>
+    /// <param name="patternType">The built-in test pattern to use.</param>
+    /// <returns>The WebApplication for chaining.</returns>
+    /// <example>
+    /// app.MapVectorGraphicsEndpoint("/ws/ball", PatternType.BouncingBall);
+    /// app.MapVectorGraphicsEndpoint("/ws/calibrate", PatternType.Calibration);
+    /// </example>
+    public static WebApplication MapVectorGraphicsEndpoint(
+        this WebApplication app,
+        string pattern,
+        PatternType patternType)
+    {
+        Func<IRemoteCanvasV2, CancellationToken, Task> handler = patternType switch
+        {
+            PatternType.BouncingBall => TestPatterns.BouncingBallAsync,
+            PatternType.MultiLayer => TestPatterns.MultiLayerAsync,
+            PatternType.Calibration => TestPatterns.CalibrationAsync,
+            _ => throw new ArgumentOutOfRangeException(nameof(patternType), patternType, "Unknown pattern type")
+        };
+
+        return app.MapVectorGraphicsEndpoint(pattern, handler);
+    }
+
+    /// <summary>
     /// Maps a WebSocket endpoint for streaming vector graphics using Protocol v2 (multi-layer, stateful context).
     /// The handler delegate can accept IRemoteCanvasV2 and CancellationToken as special parameters,
     /// plus any DI-resolved services.

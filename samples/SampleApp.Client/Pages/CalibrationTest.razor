@@ -1,0 +1,119 @@
+@page "/calibration"
+@rendermode InteractiveWebAssembly
+@using BlazorBlaze.VectorGraphics
+@using BlazorBlaze.VectorGraphics.Protocol
+@using Microsoft.Extensions.Logging
+@using SkiaSharp
+@using SkiaSharp.Views.Blazor
+@inject ILoggerFactory LoggerFactory
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+
+<PageTitle>Calibration Pattern</PageTitle>
+
+<h1>Calibration Pattern</h1>
+<p data-testid="calibration-description">Static calibration pattern for visual verification of rendering accuracy.</p>
+
+<div class="controls mb-3" data-testid="calibration-controls">
+    <button class="btn btn-success me-2" @onclick="StartStreaming" disabled="@_isStreaming" data-testid="btn-start">
+        Connect & Stream
+    </button>
+    <button class="btn btn-danger me-2" @onclick="StopStreaming" disabled="@(!_isStreaming)" data-testid="btn-stop">
+        Disconnect
+    </button>
+</div>
+
+<div class="stats mb-3 p-2 bg-dark text-light rounded" data-testid="calibration-stats">
+    <span class="me-3">Frame: <strong data-testid="frame-counter">@(_stream?.Frame ?? 0)</strong></span>
+    <span class="me-3">Status: <strong data-testid="status">@(_stream?.IsConnected == true ? "Streaming" : "Disconnected")</strong></span>
+    <span>Transfer: <strong data-testid="transfer-rate">@(_stream?.TransferRate.ToString() ?? "0 B")/s</strong></span>
+</div>
+
+@if (!string.IsNullOrEmpty(_stream?.Error))
+{
+    <div class="alert alert-danger" data-testid="error-message">
+        Error: @_stream.Error
+    </div>
+}
+
+<div style="width: 1200px; height: 800px; border: 1px solid #ccc;" data-testid="calibration-canvas">
+    <SKCanvasView @ref="_canvasView" OnPaintSurface="OnPaintSurface" EnableRenderLoop="true" style="width: 100%; height: 100%;" />
+</div>
+
+@code {
+    private const int CanvasWidth = 1200;
+    private const int CanvasHeight = 800;
+
+    private SKCanvasView? _canvasView;
+    private RenderingStreamV2? _stream;
+    private bool _isStreaming;
+
+    protected override void OnInitialized()
+    {
+        _stream = new RenderingStreamV2(CanvasWidth, CanvasHeight, LoggerFactory);
+    }
+
+    private async Task StartStreaming()
+    {
+        if (_stream == null) return;
+
+        _isStreaming = true;
+
+        try
+        {
+            var baseUri = new Uri(NavigationManager.BaseUri);
+            var wsScheme = baseUri.Scheme == "https" ? "wss" : "ws";
+            var wsUri = new Uri($"{wsScheme}://{baseUri.Host}:{baseUri.Port}/ws/calibration");
+
+            await _stream.ConnectAsync(wsUri);
+        }
+        catch (Exception ex)
+        {
+            _isStreaming = false;
+            Console.WriteLine($"Connection failed: {ex.Message}");
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task StopStreaming()
+    {
+        _isStreaming = false;
+
+        if (_stream != null)
+        {
+            await _stream.DisconnectAsync();
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnPaintSurface(SKPaintSurfaceEventArgs e)
+    {
+        var canvas = e.Surface.Canvas;
+        canvas.Clear(new SKColor(20, 20, 30));
+
+        if (_stream == null || (!_isStreaming && _stream.Frame == 0))
+        {
+            using var paint = new SKPaint { Color = SKColors.White, TextSize = 24 };
+            using var font = new SKFont(SKTypeface.Default, 24);
+            canvas.DrawText("Click 'Connect & Stream' to view calibration pattern", 300, 400, font, paint);
+            return;
+        }
+
+        _stream.Render(canvas);
+
+        if (_stream.Frame % 10 == 0)
+        {
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_stream != null)
+        {
+            await _stream.DisposeAsync();
+        }
+    }
+}

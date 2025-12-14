@@ -30,6 +30,15 @@ app.UseWebSockets();
 // WebSocket endpoint for 20K point stress test (multi-layer, stateful context)
 app.MapVectorGraphicsEndpoint("/ws/stress20k", StreamStressTestFramesV2);
 
+// WebSocket endpoint for protocol test - tests all draw types and layer composition
+app.MapVectorGraphicsEndpoint("/ws/protocol-test", PatternType.MultiLayer);
+
+// Simple bouncing ball test - minimal protocol usage for debugging
+app.MapVectorGraphicsEndpoint("/ws/test-ball", PatternType.BouncingBall);
+
+// Calibration pattern for visual verification
+app.MapVectorGraphicsEndpoint("/ws/calibration", PatternType.Calibration);
+
 app.UseAntiforgery();
 
 app.MapStaticAssets();
@@ -150,3 +159,4 @@ static async Task StreamStressTestFramesV2(IRemoteCanvasV2 canvas, CancellationT
         await canvas.FlushAsync(ct);
     }
 }
+

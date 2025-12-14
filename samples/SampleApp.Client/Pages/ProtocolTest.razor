@@ -1,0 +1,200 @@
+@page "/protocol-test"
+@rendermode InteractiveWebAssembly
+@using BlazorBlaze.VectorGraphics
+@using BlazorBlaze.VectorGraphics.Protocol
+@using Microsoft.Extensions.Logging
+@using SkiaSharp
+@using SkiaSharp.Views.Blazor
+@inject ILoggerFactory LoggerFactory
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+
+<PageTitle>Protocol V2 Test</PageTitle>
+
+<h1>VectorGraphics Protocol V2 Test</h1>
+<p data-testid="protocol-description">Tests all draw types (Circle, Rect, Line, Polygon, Text) and layer composition (Master/Remain/Clear) using Protocol v2.</p>
+
+<div class="controls mb-3" data-testid="protocol-controls">
+    <button class="btn btn-success me-2" @onclick="StartStreaming" disabled="@_isStreaming" data-testid="btn-start">
+        Connect & Stream
+    </button>
+    <button class="btn btn-danger me-2" @onclick="StopStreaming" disabled="@(!_isStreaming)" data-testid="btn-stop">
+        Disconnect
+    </button>
+    <button class="btn btn-secondary" @onclick="Reset" data-testid="btn-reset">
+        Reset
+    </button>
+</div>
+
+<div class="stats mb-3 p-2 bg-dark text-light rounded" data-testid="protocol-stats">
+    <span class="me-3">Frame: <strong data-testid="frame-counter">@(_stream?.Frame ?? 0)</strong></span>
+    <span class="me-3">FPS: <strong data-testid="fps-counter">@((_stream?.Fps ?? 0).ToString("F1"))</strong></span>
+    <span class="me-3">Status: <strong data-testid="status">@(_stream?.IsConnected == true ? "Streaming" : "Disconnected")</strong></span>
+    <span>Transfer: <strong data-testid="transfer-rate">@(_stream?.TransferRate.ToString() ?? "0 B")/s</strong></span>
+</div>
+
+<div class="stats mb-3 p-2 bg-secondary text-light rounded" data-testid="perf-stats">
+    <span class="me-3">Min FPS: <strong data-testid="min-fps">@(_minFps == float.MaxValue ? "-" : _minFps.ToString("F1"))</strong></span>
+    <span class="me-3">Max FPS: <strong data-testid="max-fps">@(_maxFps == 0 ? "-" : _maxFps.ToString("F1"))</strong></span>
+    <span class="me-3">Avg FPS: <strong data-testid="avg-fps">@(_fpsHistory.Count > 0 ? _fpsHistory.Average().ToString("F1") : "-")</strong></span>
+    <span>Render Time: <strong data-testid="render-time">@_lastRenderTimeMs.ToString("F2") ms</strong></span>
+</div>
+
+@if (!string.IsNullOrEmpty(_stream?.Error))
+{
+    <div class="alert alert-danger" data-testid="error-message">
+        Error: @_stream.Error
+    </div>
+}
+
+<div style="width: 1200px; height: 800px; border: 1px solid #ccc;" data-testid="protocol-canvas">
+    <SKCanvasView @ref="_canvasView" OnPaintSurface="OnPaintSurface" EnableRenderLoop="true" style="width: 100%; height: 100%;" />
+</div>
+
+<div class="mt-3">
+    <h5>Test Description</h5>
+    <div class="row">
+        <div class="col-md-6">
+            <h6>Layer 0 - Static Background (Remain)</h6>
+            <p>Grid lines and labels. Drawn once on first frame, then uses Remain to persist.</p>
+        </div>
+        <div class="col-md-6">
+            <h6>Layer 1 - Animated Draw Types (Master)</h6>
+            <p>All draw operations animated: Circle (pulsing), Rectangle (rotating), Line (spinning), Polygon (scaling), Text (frame counter).</p>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-6">
+            <h6>Layer 2 - Periodic Updates (Remain/Master)</h6>
+            <p>Updates every 60 frames (~1 second). Tests switching between Remain and Master modes.</p>
+        </div>
+        <div class="col-md-6">
+            <h6>Expected Behavior</h6>
+            <p>If you see "Remain failed for layer X" errors, it indicates protocol buffer misalignment.</p>
+        </div>
+    </div>
+</div>
+
+@code {
+    private const int CanvasWidth = 1200;
+    private const int CanvasHeight = 800;
+
+    private SKCanvasView? _canvasView;
+    private RenderingStreamV2? _stream;
+    private bool _isStreaming;
+    private System.Diagnostics.Stopwatch _renderStopwatch = new();
+
+    // Performance tracking
+    private float _minFps = float.MaxValue;
+    private float _maxFps = 0;
+    private double _lastRenderTimeMs;
+    private List<float> _fpsHistory = new();
+
+    protected override void OnInitialized()
+    {
+        // Create the rendering stream with V2 protocol decoder
+        _stream = new RenderingStreamV2(CanvasWidth, CanvasHeight, LoggerFactory);
+    }
+
+    private async Task StartStreaming()
+    {
+        if (_stream == null) return;
+
+        _isStreaming = true;
+        _minFps = float.MaxValue;
+        _maxFps = 0;
+        _fpsHistory.Clear();
+
+        try
+        {
+            // Build WebSocket URI from current location
+            var baseUri = new Uri(NavigationManager.BaseUri);
+            var wsScheme = baseUri.Scheme == "https" ? "wss" : "ws";
+            var wsUri = new Uri($"{wsScheme}://{baseUri.Host}:{baseUri.Port}/ws/protocol-test");
+
+            await _stream.ConnectAsync(wsUri);
+        }
+        catch (Exception ex)
+        {
+            _isStreaming = false;
+            Console.WriteLine($"Connection failed: {ex.Message}");
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task StopStreaming()
+    {
+        _isStreaming = false;
+
+        if (_stream != null)
+        {
+            await _stream.DisconnectAsync();
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task Reset()
+    {
+        await StopStreaming();
+        _minFps = float.MaxValue;
+        _maxFps = 0;
+        _lastRenderTimeMs = 0;
+        _fpsHistory.Clear();
+        _canvasView?.Invalidate();
+        StateHasChanged();
+    }
+
+    private void OnPaintSurface(SKPaintSurfaceEventArgs e)
+    {
+        _renderStopwatch.Restart();
+
+        var canvas = e.Surface.Canvas;
+        canvas.Clear(new SKColor(20, 20, 30));
+
+        if (_stream == null || (!_isStreaming && _stream.Frame == 0))
+        {
+            // Show idle message
+            using var paint = new SKPaint { Color = SKColors.White, TextSize = 24 };
+            using var font = new SKFont(SKTypeface.Default, 24);
+            canvas.DrawText("Click 'Connect & Stream' to test Protocol V2", 350, 400, font, paint);
+            return;
+        }
+
+        // Render the stream content (composites all layers)
+        _stream.Render(canvas);
+
+        // Track FPS statistics
+        var fps = _stream.Fps;
+        if (fps > 0)
+        {
+            if (fps < _minFps) _minFps = fps;
+            if (fps > _maxFps) _maxFps = fps;
+            _fpsHistory.Add(fps);
+
+            // Keep only last 100 samples for average
+            if (_fpsHistory.Count > 100)
+            {
+                _fpsHistory.RemoveAt(0);
+            }
+        }
+
+        _renderStopwatch.Stop();
+        _lastRenderTimeMs = _renderStopwatch.Elapsed.TotalMilliseconds;
+
+        // Update stats display
+        if (_stream.Frame % 10 == 0)
+        {
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_stream != null)
+        {
+            await _stream.DisposeAsync();
+        }
+    }
+}
