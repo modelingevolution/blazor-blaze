@@ -19,4 +19,5 @@ public interface ICanvas
     void DrawCircle(int centerX, int centerY, int radius, RgbColor stroke, int thickness);
     void DrawRect(int x, int y, int width, int height, RgbColor stroke, int thickness);
     void DrawLine(int x1, int y1, int x2, int y2, RgbColor stroke, int thickness);
+    void DrawJpeg(in ReadOnlySpan<byte> jpegData, int x, int y, int width, int height);
 }

@@ -21,7 +21,7 @@ public sealed class WebSocketRemoteCanvasV2 : IRemoteCanvasV2
 
     private ulong _frameId;
 
-    public WebSocketRemoteCanvasV2(WebSocket webSocket, int bufferSize = 512 * 1024)
+    public WebSocketRemoteCanvasV2(WebSocket webSocket, int bufferSize = 1024 * 1024)
     {
         _webSocket = webSocket ?? throw new ArgumentNullException(nameof(webSocket));
         _buffer = new byte[bufferSize];
@@ -120,7 +120,8 @@ public sealed class WebSocketRemoteCanvasV2 : IRemoteCanvasV2
             _layerId = layerId;
             // Each layer gets its own section of a shared buffer or uses a dedicated buffer
             // For simplicity, use a dedicated buffer per layer
-            _layerBuffer = new byte[64 * 1024]; // 64KB per layer should be enough
+            // 256KB per layer to accommodate JPEG frames (Full HD JPEG ~30-80KB)
+            _layerBuffer = new byte[256 * 1024];
             _dataOffset = HeaderReserve;
         }
 
@@ -290,6 +291,12 @@ public sealed class WebSocketRemoteCanvasV2 : IRemoteCanvasV2
         public void DrawLine(int x1, int y1, int x2, int y2)
         {
             _dataOffset += VectorGraphicsEncoderV2.WriteDrawLine(GetWriteSpan(), x1, y1, x2, y2);
+            _operationCount++;
+        }
+
+        public void DrawJpeg(ReadOnlySpan<byte> jpegData, int x, int y, int width, int height)
+        {
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawJpeg(GetWriteSpan(), jpegData, x, y, width, height);
             _operationCount++;
         }
 

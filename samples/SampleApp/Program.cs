@@ -1,3 +1,4 @@
+using System.Text.Json;
 using BlazorBlaze.Server;
 using BlazorBlaze.VectorGraphics;
 using SampleApp.Client.Pages;
@@ -38,6 +39,18 @@ app.MapVectorGraphicsEndpoint("/ws/test-ball", PatternType.BouncingBall);
 
 // Calibration pattern for visual verification
 app.MapVectorGraphicsEndpoint("/ws/calibration", PatternType.Calibration);
+
+// MJPEG + Ball: JPEG frames on layer 0, bouncing ball on layer 1
+var mjpegPath = Path.Combine(app.Environment.WebRootPath, "videos", "test-ball-mjpeg");
+app.MapVectorGraphicsEndpoint("/ws/mjpeg-ball", async (IRemoteCanvasV2 canvas, CancellationToken ct) =>
+{
+    await StreamMjpegWithBallAsync(canvas, mjpegPath, ct);
+});
+
+// MJPEG streaming endpoint for looping playback
+var videosPath = Path.Combine(app.Environment.WebRootPath, "videos");
+app.MapMjpegEndpoint("/mjpeg/{filename}", videosPath);
+app.MapMjpegFrameEndpoint("/mjpeg-frame/{filename}/{frame:int}", videosPath);
 
 app.UseAntiforgery();
 
@@ -157,6 +170,116 @@ static async Task StreamStressTestFramesV2(IRemoteCanvasV2 canvas, CancellationT
 
         // Flush frame to WebSocket
         await canvas.FlushAsync(ct);
+    }
+}
+
+static async Task StreamMjpegWithBallAsync(IRemoteCanvasV2 canvas, string mjpegPath, CancellationToken ct)
+{
+    const int width = 1920, height = 1080;
+    const int ballRadius = 40;
+    const long MaxCacheSize = 128 * 1024 * 1024; // 128MB
+
+    // Load MJPEG index
+    var jsonPath = mjpegPath + ".json";
+    if (!File.Exists(mjpegPath) || !File.Exists(jsonPath))
+        throw new FileNotFoundException($"MJPEG files not found: {mjpegPath}");
+
+    var jsonContent = await File.ReadAllTextAsync(jsonPath, ct);
+    var metadata = JsonSerializer.Deserialize<RecordingMetadata>(jsonContent)
+        ?? throw new InvalidOperationException("Failed to parse MJPEG index");
+
+    var frameKeys = metadata.Index.Keys.ToArray();
+    var frameCount = frameKeys.Length;
+
+    if (frameCount == 0)
+        throw new InvalidOperationException("MJPEG index has no frames");
+
+    // Check file size and cache if under 128MB
+    var fileInfo = new FileInfo(mjpegPath);
+    var useCache = fileInfo.Length <= MaxCacheSize;
+    byte[][]? frameCache = null;
+
+    if (useCache)
+    {
+        // Pre-load all frames into memory
+        frameCache = new byte[frameCount][];
+        await using var cacheStream = File.OpenRead(mjpegPath);
+
+        for (int i = 0; i < frameCount; i++)
+        {
+            var frameSequence = frameKeys[i];
+            var frame = metadata.Index[frameSequence];
+            frameCache[i] = new byte[frame.Size];
+            cacheStream.Position = (long)frame.Start;
+            await cacheStream.ReadExactlyAsync(frameCache[i], ct);
+        }
+    }
+
+    // Ball animation state
+    float ballX = width / 2f, ballY = height / 2f;
+    float dx = 8, dy = 6;
+
+    await using var mjpegStream = useCache ? null : File.OpenRead(mjpegPath);
+    using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(33)); // ~30fps
+
+    int frameIndex = 0;
+
+    while (!ct.IsCancellationRequested)
+    {
+        canvas.BeginFrame();
+
+        // Layer 0: MJPEG frame (Master every frame)
+        var layer0 = canvas.Layer(0);
+        layer0.Master();
+
+        byte[] jpegData;
+        if (useCache)
+        {
+            // Read from cache
+            jpegData = frameCache![frameIndex];
+        }
+        else
+        {
+            // Read from disk
+            var frameSequence = frameKeys[frameIndex];
+            var frame = metadata.Index[frameSequence];
+            jpegData = new byte[frame.Size];
+            mjpegStream!.Position = (long)frame.Start;
+            await mjpegStream.ReadExactlyAsync(jpegData, ct);
+        }
+
+        // Draw JPEG as background
+        layer0.DrawJpeg(jpegData, 0, 0, width, height);
+
+        // Layer 1: Bouncing ball overlay
+        var layer1 = canvas.Layer(1);
+        layer1.Master();
+
+        // Update ball position
+        ballX += dx;
+        ballY += dy;
+        if (ballX - ballRadius <= 0 || ballX + ballRadius >= width) dx = -dx;
+        if (ballY - ballRadius <= 0 || ballY + ballRadius >= height) dy = -dy;
+
+        // Draw red ball
+        layer1.SetFill(new RgbColor(255, 50, 50));
+        layer1.SetStroke(RgbColor.White);
+        layer1.SetThickness(3);
+        layer1.DrawCircle((int)ballX, (int)ballY, ballRadius);
+
+        // Draw frame info text
+        layer1.SetFontSize(20);
+        layer1.SetFontColor(RgbColor.White);
+        var cacheStatus = useCache ? "CACHED" : "DISK";
+        layer1.DrawText($"Frame: {canvas.FrameId} | MJPEG: {frameIndex}/{frameCount} ({cacheStatus})", 20, 40);
+
+        await canvas.FlushAsync(ct);
+
+        // Loop MJPEG
+        frameIndex = (frameIndex + 1) % frameCount;
+
+        if (!await timer.WaitForNextTickAsync(ct))
+            break;
     }
 }
 

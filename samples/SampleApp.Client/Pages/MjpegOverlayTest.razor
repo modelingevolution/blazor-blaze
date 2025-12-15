@@ -1,0 +1,158 @@
+@page "/mjpeg-overlay"
+@rendermode InteractiveWebAssembly
+@using BlazorBlaze.VectorGraphics
+@using BlazorBlaze.VectorGraphics.Protocol
+@using Microsoft.Extensions.Logging
+@using SkiaSharp
+@using SkiaSharp.Views.Blazor
+@inject ILoggerFactory LoggerFactory
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+
+<PageTitle>MJPEG Overlay Test</PageTitle>
+
+<h1>MJPEG + Transparent VectorGraphics Overlay</h1>
+<p>Tests transparent canvas rendering over MJPEG stream. The red bouncing ball is from VectorGraphics WebSocket stream, the background is from MJPEG recording (looping).</p>
+
+<div class="controls mb-3">
+    <button class="btn btn-success me-2" @onclick="StartStreaming" disabled="@_isStreaming">
+        Connect Overlay
+    </button>
+    <button class="btn btn-danger me-2" @onclick="StopStreaming" disabled="@(!_isStreaming)">
+        Disconnect
+    </button>
+</div>
+
+<div class="stats mb-3 p-2 bg-dark text-light rounded">
+    <span class="me-3">Frame: <strong>@(_stream?.Frame ?? 0)</strong></span>
+    <span class="me-3">FPS: <strong>@((_stream?.Fps ?? 0).ToString("F1"))</strong></span>
+    <span class="me-3">Status: <strong>@(_stream?.IsConnected == true ? "Streaming" : "Disconnected")</strong></span>
+    <span>Transfer: <strong>@(_stream?.TransferRate.ToString() ?? "0 B")/s</strong></span>
+</div>
+
+@if (!string.IsNullOrEmpty(_stream?.Error))
+{
+    <div class="alert alert-danger">
+        Error: @_stream.Error
+    </div>
+}
+
+@* Container with relative positioning for overlay *@
+<div style="position: relative; width: 1920px; height: 1080px; border: 2px solid #333; background: #000;">
+
+    @* MJPEG stream - base layer *@
+    <img src="@GetMjpegUrl()"
+         alt="MJPEG Background"
+         style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain;" />
+
+    @* Transparent SkiaSharp canvas - overlay layer *@
+    <SKCanvasView @ref="_canvasView"
+                  OnPaintSurface="OnPaintSurface"
+                  EnableRenderLoop="true"
+                  style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;" />
+</div>
+
+<div class="mt-3">
+    <h4>What you should see:</h4>
+    <ul>
+        <li><strong>Background:</strong> GStreamer test pattern with white bouncing ball (from MJPEG recording, looping)</li>
+        <li><strong>Overlay:</strong> Red bouncing ball with frame counter (from VectorGraphics WebSocket)</li>
+        <li>Both animations should run independently and smoothly</li>
+        <li>The MJPEG stream is served from the local server via multipart/x-mixed-replace</li>
+    </ul>
+</div>
+
+@code {
+    private const int CanvasWidth = 1920;
+    private const int CanvasHeight = 1080;
+    private const string MjpegFilename = "test-ball-mjpeg";
+
+    private SKCanvasView? _canvasView;
+    private RenderingStreamV2? _stream;
+    private bool _isStreaming;
+
+    protected override void OnInitialized()
+    {
+        _stream = new RenderingStreamV2(CanvasWidth, CanvasHeight, LoggerFactory);
+    }
+
+    private string GetMjpegUrl()
+    {
+        var baseUri = new Uri(NavigationManager.BaseUri);
+        return $"{baseUri.Scheme}://{baseUri.Host}:{baseUri.Port}/mjpeg/{MjpegFilename}";
+    }
+
+    private async Task StartStreaming()
+    {
+        if (_stream == null) return;
+
+        _isStreaming = true;
+
+        try
+        {
+            var baseUri = new Uri(NavigationManager.BaseUri);
+            var wsScheme = baseUri.Scheme == "https" ? "wss" : "ws";
+            var wsUri = new Uri($"{wsScheme}://{baseUri.Host}:{baseUri.Port}/ws/test-ball");
+
+            Console.WriteLine($"Connecting to {wsUri}...");
+            await _stream.ConnectAsync(wsUri);
+            Console.WriteLine("Connected successfully");
+        }
+        catch (Exception ex)
+        {
+            _isStreaming = false;
+            Console.WriteLine($"Connection failed: {ex.Message}");
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task StopStreaming()
+    {
+        _isStreaming = false;
+
+        if (_stream != null)
+        {
+            await _stream.DisconnectAsync();
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnPaintSurface(SKPaintSurfaceEventArgs e)
+    {
+        var canvas = e.Surface.Canvas;
+
+        // Clear with TRANSPARENT - this is key for overlay!
+        canvas.Clear(SKColors.Transparent);
+
+        if (_stream == null || !_isStreaming)
+        {
+            // Show hint text when not streaming
+            using var paint = new SKPaint { Color = new SKColor(255, 255, 255, 180) };
+            using var bgPaint = new SKPaint { Color = new SKColor(0, 0, 0, 128) };
+            using var font = new SKFont(SKTypeface.Default, 20);
+
+            var text = "Click 'Connect Overlay' to start VectorGraphics stream";
+            canvas.DrawRect(CanvasWidth/2 - 250, CanvasHeight/2 - 15, 500, 30, bgPaint);
+            canvas.DrawText(text, CanvasWidth/2 - 240, CanvasHeight/2 + 7, font, paint);
+            return;
+        }
+
+        // Render VectorGraphics stream
+        _stream.Render(canvas);
+
+        if (_stream.Frame % 10 == 0)
+        {
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_stream != null)
+        {
+            await _stream.DisposeAsync();
+        }
+    }
+}

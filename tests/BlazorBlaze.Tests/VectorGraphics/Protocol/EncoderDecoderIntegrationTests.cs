@@ -77,6 +77,12 @@ public class EncoderDecoderIntegrationTests
             Operations.Add($"DrawLine({x1},{y1} -> {x2},{y2}, stroke={stroke}, thickness={thickness})");
         }
 
+        public void DrawJpeg(in ReadOnlySpan<byte> jpegData, int x, int y, int width, int height)
+        {
+            DrawCalls.Add(("DrawJpeg", new object[] { jpegData.ToArray(), x, y, width, height }));
+            Operations.Add($"DrawJpeg({jpegData.Length} bytes, {x}, {y}, {width}x{height})");
+        }
+
         public void Clear() => Operations.Add("Clear");
         public void DrawTo(SKCanvas canvas) { }
         public void Dispose() { }

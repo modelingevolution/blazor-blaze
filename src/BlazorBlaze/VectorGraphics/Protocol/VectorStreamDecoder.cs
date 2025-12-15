@@ -300,6 +300,10 @@ public class VectorStreamDecoder(IStage stage) : IFrameDecoder
                 offset += DecodeDrawLine(buffer.Slice(offset), canvas, context);
                 break;
 
+            case OpType.DrawJpeg:
+                offset += DecodeDrawJpeg(buffer.Slice(offset), canvas);
+                break;
+
             default:
                 throw new InvalidOperationException($"Unknown operation type: {opType}");
         }
@@ -559,6 +563,39 @@ public class VectorStreamDecoder(IStage stage) : IFrameDecoder
         offset += consumed;
 
         canvas.DrawLine(x1, y1, x2, y2, context.Stroke, context.Thickness);
+        return offset;
+    }
+
+    private int DecodeDrawJpeg(ReadOnlySpan<byte> buffer, ICanvas canvas)
+    {
+        int offset = 0;
+
+        int consumed = BinaryEncoding.ReadSignedVarint(buffer, out int x);
+        if (consumed == 0) return 0;
+        offset += consumed;
+
+        consumed = BinaryEncoding.ReadSignedVarint(buffer.Slice(offset), out int y);
+        if (consumed == 0) return 0;
+        offset += consumed;
+
+        consumed = BinaryEncoding.ReadVarint(buffer.Slice(offset), out uint width);
+        if (consumed == 0) return 0;
+        offset += consumed;
+
+        consumed = BinaryEncoding.ReadVarint(buffer.Slice(offset), out uint height);
+        if (consumed == 0) return 0;
+        offset += consumed;
+
+        consumed = BinaryEncoding.ReadVarint(buffer.Slice(offset), out uint jpegLength);
+        if (consumed == 0) return 0;
+        offset += consumed;
+
+        if (offset + jpegLength > buffer.Length) return 0;
+
+        var jpegData = buffer.Slice(offset, (int)jpegLength);
+        canvas.DrawJpeg(jpegData, x, y, (int)width, (int)height);
+        offset += (int)jpegLength;
+
         return offset;
     }
 }

@@ -177,5 +177,10 @@ public interface ILayerCanvas
     /// </summary>
     void DrawLine(int x1, int y1, int x2, int y2);
 
+    /// <summary>
+    /// Draws a JPEG image at the specified position and size.
+    /// </summary>
+    void DrawJpeg(ReadOnlySpan<byte> jpegData, int x, int y, int width, int height);
+
     #endregion
 }

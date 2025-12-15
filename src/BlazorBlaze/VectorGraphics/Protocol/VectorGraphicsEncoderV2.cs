@@ -382,6 +382,23 @@ public static class VectorGraphicsEncoderV2
         return offset;
     }
 
+    /// <summary>
+    /// Writes DrawJpeg operation with raw JPEG data.
+    /// </summary>
+    public static int WriteDrawJpeg(Span<byte> buffer, ReadOnlySpan<byte> jpegData, int x, int y, int width, int height)
+    {
+        int offset = 0;
+        buffer[offset++] = (byte)OpType.DrawJpeg;
+        offset += BinaryEncoding.WriteSignedVarint(buffer.Slice(offset), x);
+        offset += BinaryEncoding.WriteSignedVarint(buffer.Slice(offset), y);
+        offset += BinaryEncoding.WriteVarint(buffer.Slice(offset), (uint)width);
+        offset += BinaryEncoding.WriteVarint(buffer.Slice(offset), (uint)height);
+        offset += BinaryEncoding.WriteVarint(buffer.Slice(offset), (uint)jpegData.Length);
+        jpegData.CopyTo(buffer.Slice(offset));
+        offset += jpegData.Length;
+        return offset;
+    }
+
     #endregion
 
     #region Property Encoding

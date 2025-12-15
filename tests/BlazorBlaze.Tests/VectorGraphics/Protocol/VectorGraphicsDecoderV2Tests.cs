@@ -854,4 +854,21 @@ internal class TestCanvas : ICanvas
         LastLineX2 = x2;
         LastLineY2 = y2;
     }
+
+    public int DrawJpegCalls { get; private set; }
+    public byte[]? LastJpegData { get; private set; }
+    public int LastJpegX { get; private set; }
+    public int LastJpegY { get; private set; }
+    public int LastJpegWidth { get; private set; }
+    public int LastJpegHeight { get; private set; }
+
+    public void DrawJpeg(in ReadOnlySpan<byte> jpegData, int x, int y, int width, int height)
+    {
+        DrawJpegCalls++;
+        LastJpegData = jpegData.ToArray();
+        LastJpegX = x;
+        LastJpegY = y;
+        LastJpegWidth = width;
+        LastJpegHeight = height;
+    }
 }

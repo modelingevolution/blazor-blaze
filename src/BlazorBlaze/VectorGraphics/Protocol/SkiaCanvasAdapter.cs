@@ -57,4 +57,13 @@ internal class SkiaCanvasAdapter : ICanvas
         var paint = SKPaintCache.Instance.GetStrokePaint(stroke, (ushort)thickness);
         _canvas.DrawLine(x1, y1, x2, y2, paint);
     }
+
+    public void DrawJpeg(in ReadOnlySpan<byte> jpegData, int x, int y, int width, int height)
+    {
+        using var image = SKImage.FromEncodedData(jpegData);
+        if (image == null) return;
+
+        var destRect = new SKRect(x, y, x + width, y + height);
+        _canvas.DrawImage(image, destRect);
+    }
 }

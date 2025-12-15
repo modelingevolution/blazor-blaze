@@ -54,6 +54,7 @@ public enum OpType : byte
     DrawRect = 0x04,
     DrawLine = 0x05,
     DrawPath = 0x06,
+    DrawJpeg = 0x07,
 
     // Context operations (0x10-0x1F)
     SetContext = 0x10,

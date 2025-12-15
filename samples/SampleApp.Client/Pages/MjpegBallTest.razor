@@ -1,0 +1,139 @@
+@page "/mjpeg-ball"
+@rendermode InteractiveWebAssembly
+@using BlazorBlaze.VectorGraphics
+@using BlazorBlaze.VectorGraphics.Protocol
+@using Microsoft.Extensions.Logging
+@using SkiaSharp
+@using SkiaSharp.Views.Blazor
+@inject ILoggerFactory LoggerFactory
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+
+<PageTitle>MJPEG + Ball Test (Pure VectorGraphics)</PageTitle>
+
+<h1>MJPEG + Ball via VectorGraphics Protocol</h1>
+<p>Two layers streamed over WebSocket: Layer 0 = JPEG frames, Layer 1 = Bouncing red ball overlay. No HTML overlay - pure VectorGraphics rendering.</p>
+
+<div class="controls mb-3">
+    <button class="btn btn-success me-2" @onclick="StartStreaming" disabled="@_isStreaming">
+        Connect
+    </button>
+    <button class="btn btn-danger me-2" @onclick="StopStreaming" disabled="@(!_isStreaming)">
+        Disconnect
+    </button>
+</div>
+
+<div class="stats mb-3 p-2 bg-dark text-light rounded">
+    <span class="me-3">Frame: <strong>@(_stream?.Frame ?? 0)</strong></span>
+    <span class="me-3">FPS: <strong>@((_stream?.Fps ?? 0).ToString("F1"))</strong></span>
+    <span class="me-3">Status: <strong>@(_stream?.IsConnected == true ? "Streaming" : "Disconnected")</strong></span>
+    <span>Transfer: <strong>@(_stream?.TransferRate.ToString() ?? "0 B")/s</strong></span>
+</div>
+
+@if (!string.IsNullOrEmpty(_stream?.Error))
+{
+    <div class="alert alert-danger">
+        Error: @_stream.Error
+    </div>
+}
+
+<div style="border: 2px solid #333; background: #000; display: inline-block;">
+    <SKCanvasView @ref="_canvasView"
+                  OnPaintSurface="OnPaintSurface"
+                  EnableRenderLoop="true"
+                  style="width: 1920px; height: 1080px;" />
+</div>
+
+<div class="mt-3">
+    <h4>What you should see:</h4>
+    <ul>
+        <li><strong>Layer 0:</strong> GStreamer test pattern with white bouncing ball (JPEG frames from MJPEG recording)</li>
+        <li><strong>Layer 1:</strong> Red bouncing ball with frame counter (vector graphics overlay)</li>
+        <li>Both layers are streamed together over a single WebSocket connection</li>
+        <li>The JPEG data (~30-60KB per frame) is embedded in the VectorGraphics protocol</li>
+    </ul>
+</div>
+
+@code {
+    private const int CanvasWidth = 1920;
+    private const int CanvasHeight = 1080;
+
+    private SKCanvasView? _canvasView;
+    private RenderingStreamV2? _stream;
+    private bool _isStreaming;
+
+    protected override void OnInitialized()
+    {
+        _stream = new RenderingStreamV2(CanvasWidth, CanvasHeight, LoggerFactory);
+    }
+
+    private async Task StartStreaming()
+    {
+        if (_stream == null) return;
+
+        _isStreaming = true;
+
+        try
+        {
+            var baseUri = new Uri(NavigationManager.BaseUri);
+            var wsScheme = baseUri.Scheme == "https" ? "wss" : "ws";
+            var wsUri = new Uri($"{wsScheme}://{baseUri.Host}:{baseUri.Port}/ws/mjpeg-ball");
+
+            Console.WriteLine($"Connecting to {wsUri}...");
+            await _stream.ConnectAsync(wsUri);
+            Console.WriteLine("Connected successfully");
+        }
+        catch (Exception ex)
+        {
+            _isStreaming = false;
+            Console.WriteLine($"Connection failed: {ex.Message}");
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task StopStreaming()
+    {
+        _isStreaming = false;
+
+        if (_stream != null)
+        {
+            await _stream.DisconnectAsync();
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnPaintSurface(SKPaintSurfaceEventArgs e)
+    {
+        var canvas = e.Surface.Canvas;
+        canvas.Clear(SKColors.Black);
+
+        if (_stream == null || !_isStreaming)
+        {
+            using var paint = new SKPaint { Color = new SKColor(255, 255, 255, 180) };
+            using var bgPaint = new SKPaint { Color = new SKColor(0, 0, 0, 128) };
+            using var font = new SKFont(SKTypeface.Default, 24);
+
+            var text = "Click 'Connect' to start MJPEG + Ball stream";
+            canvas.DrawRect(CanvasWidth/2 - 280, CanvasHeight/2 - 20, 560, 40, bgPaint);
+            canvas.DrawText(text, CanvasWidth/2 - 270, CanvasHeight/2 + 8, font, paint);
+            return;
+        }
+
+        _stream.Render(canvas);
+
+        if (_stream.Frame % 10 == 0)
+        {
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_stream != null)
+        {
+            await _stream.DisposeAsync();
+        }
+    }
+}
