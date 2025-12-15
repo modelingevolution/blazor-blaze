@@ -24,13 +24,12 @@ public class RenderingStreamV2 : IRenderingStream
 
     // Renderer's current frame copy
     private RefArray<Lease<ILayer>>? _rendererFrame;
-    private readonly object _renderLock = new();
+    
 
     // Transfer rate tracking (sliding window of 1 second)
     private readonly Queue<(long timestamp, int bytes)> _bytesWindow = new();
     private long _currentWindowBytes;
-    private readonly object _bytesLock = new();
-
+    
     /// <summary>
     /// Creates a RenderingStreamV2 with a custom decoder.
     /// Use RenderingStreamBuilder for a fluent API.
@@ -222,22 +221,22 @@ public class RenderingStreamV2 : IRenderingStream
         var now = Environment.TickCount64;
         const long windowMs = 1000; // 1 second window
 
-        lock (_bytesLock)
+
+
+        // Add new entry
+        _bytesWindow.Enqueue((now, bytesReceived));
+        _currentWindowBytes += bytesReceived;
+
+        // Remove entries older than the window
+        while (_bytesWindow.Count > 0 && now - _bytesWindow.Peek().timestamp > windowMs)
         {
-            // Add new entry
-            _bytesWindow.Enqueue((now, bytesReceived));
-            _currentWindowBytes += bytesReceived;
-
-            // Remove entries older than the window
-            while (_bytesWindow.Count > 0 && now - _bytesWindow.Peek().timestamp > windowMs)
-            {
-                var old = _bytesWindow.Dequeue();
-                _currentWindowBytes -= old.bytes;
-            }
-
-            // Update transfer rate (bytes per second)
-            TransferRate = _currentWindowBytes;
+            var old = _bytesWindow.Dequeue();
+            _currentWindowBytes -= old.bytes;
         }
+
+        // Update transfer rate (bytes per second)
+        TransferRate = _currentWindowBytes;
+
     }
 
     public void Render(SKCanvas canvas)
@@ -245,27 +244,25 @@ public class RenderingStreamV2 : IRenderingStream
         // Try to get a new frame if available
         if (_stage.TryCopyFrame(out var newFrame))
         {
-            lock (_renderLock)
-            {
-                _rendererFrame?.Dispose();
-                _rendererFrame = newFrame;
-            }
+
+            _rendererFrame?.Dispose();
+            _rendererFrame = newFrame;
+
         }
 
         // Render current frame - iterate through layer slots in order
-        lock (_renderLock)
+
+        if (_rendererFrame.HasValue)
         {
-            if (_rendererFrame.HasValue)
+            var frame = _rendererFrame.GetValueOrDefault();
+            for (byte i = 0; i < 16; i++)
             {
-                var frame = _rendererFrame.GetValueOrDefault();
-                for (byte i = 0; i < 16; i++)
-                {
-                    var layer = frame[i];
-                    if (!layer.IsEmpty)
-                        layer.Value.DrawTo(canvas);
-                }
+                var layer = frame[i];
+                if (!layer.IsEmpty)
+                    layer.Value.DrawTo(canvas);
             }
         }
+
     }
 
     public async ValueTask DisposeAsync()
@@ -274,12 +271,10 @@ public class RenderingStreamV2 : IRenderingStream
         _socket?.Dispose();
         _cts?.Dispose();
 
-        lock (_renderLock)
-        {
-            _rendererFrame?.Dispose();
-            _rendererFrame = null;
-        }
-
+        
+        _rendererFrame?.Dispose();
+        _rendererFrame = null;
+        
         _stage.Dispose();
         _layerPool.Dispose();
     }

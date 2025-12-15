@@ -1,0 +1,88 @@
+@* Render mode set by parent page - WASM for SkiaSharp support *@
+@using BlazorBlaze.VectorGraphics
+@using Microsoft.Extensions.Logging
+@using SkiaSharp
+@using SkiaSharp.Views.Blazor
+@inject ILoggerFactory LoggerFactory
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+
+@* Transparent overlay positioned absolutely within parent container *@
+<SKCanvasView @ref="_canvasView"
+              OnPaintSurface="OnPaint"
+              EnableRenderLoop="true"
+              style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50;" />
+
+@code {
+    private const int CanvasWidth = 1920;
+    private const int CanvasHeight = 1080;
+
+    /// <summary>
+    /// WebSocket endpoint path (e.g., "/ws/test-ball").
+    /// Will be converted to full WebSocket URI based on current host.
+    /// </summary>
+    [Parameter]
+    public string? StreamPath { get; set; }
+
+    private SKCanvasView? _canvasView;
+    private RenderingStreamV2? _stream;
+    private bool _connected;
+    private bool _connectionAttempted;
+
+    protected override void OnInitialized()
+    {
+        _stream = new RenderingStreamV2(CanvasWidth, CanvasHeight, LoggerFactory);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_connectionAttempted && !string.IsNullOrEmpty(StreamPath))
+        {
+            _connectionAttempted = true;
+            await ConnectAsync();
+        }
+    }
+
+    private async Task ConnectAsync()
+    {
+        if (_stream == null || string.IsNullOrEmpty(StreamPath))
+            return;
+
+        try
+        {
+            var baseUri = new Uri(NavigationManager.BaseUri);
+            var wsScheme = baseUri.Scheme == "https" ? "wss" : "ws";
+            var wsUri = new Uri($"{wsScheme}://{baseUri.Host}:{baseUri.Port}{StreamPath}");
+
+            Console.WriteLine($"VectorOverlay connecting to {wsUri}");
+            await _stream.ConnectAsync(wsUri);
+            _connected = true;
+            Console.WriteLine("VectorOverlay connected successfully");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"VectorOverlay connection failed: {ex.Message}");
+            _connected = false;
+        }
+    }
+
+    private void OnPaint(SKPaintSurfaceEventArgs e)
+    {
+        var canvas = e.Surface.Canvas;
+        canvas.Clear(SKColors.Transparent);
+
+        if (!_connected || _stream == null)
+            return;
+
+        _stream.Render(canvas);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_stream != null)
+        {
+            await _stream.DisposeAsync();
+            _stream = null;
+        }
+    }
+}

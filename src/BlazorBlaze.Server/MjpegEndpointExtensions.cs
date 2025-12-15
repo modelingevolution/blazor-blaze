@@ -8,9 +8,12 @@ namespace BlazorBlaze.Server;
 
 /// <summary>
 /// Extension methods for MJPEG streaming endpoints.
+/// Includes 128MB frame caching for small recordings.
 /// </summary>
 public static class MjpegEndpointExtensions
 {
+    private const long MaxCacheSize = 128 * 1024 * 1024; // 128MB
+
     private static readonly byte[] MultipartBoundary = Encoding.ASCII.GetBytes("--frame\r\n");
     private static readonly byte[] ContentTypeHeader = Encoding.ASCII.GetBytes("Content-Type: image/jpeg\r\n");
     private static readonly byte[] ContentLengthPrefix = Encoding.ASCII.GetBytes("Content-Length: ");
@@ -19,6 +22,7 @@ public static class MjpegEndpointExtensions
 
     /// <summary>
     /// Maps an MJPEG streaming endpoint that loops the recording.
+    /// Files under 128MB are cached in memory for better performance.
     /// </summary>
     /// <param name="endpoints">The endpoint route builder.</param>
     /// <param name="pattern">URL pattern (e.g., "/mjpeg/{filename}").</param>
@@ -39,14 +43,41 @@ public static class MjpegEndpointExtensions
                 return;
             }
 
+            var ct = context.RequestAborted;
+
             // Load index
-            var jsonContent = await File.ReadAllTextAsync(jsonPath, context.RequestAborted);
+            var jsonContent = await File.ReadAllTextAsync(jsonPath, ct);
             var metadata = JsonSerializer.Deserialize<RecordingMetadata>(jsonContent);
 
             if (metadata == null || metadata.Index.Count == 0)
             {
                 context.Response.StatusCode = 500;
+                await context.Response.WriteAsync($"Failed to parse index or empty. Content length: {jsonContent.Length}");
                 return;
+            }
+
+            var frameKeys = metadata.Index.Keys.ToArray();
+            var frameCount = frameKeys.Length;
+
+            // Check file size and cache if under 128MB
+            var fileInfo = new FileInfo(mjpegPath);
+            var useCache = fileInfo.Length <= MaxCacheSize;
+            byte[][]? frameCache = null;
+
+            if (useCache)
+            {
+                // Pre-load all frames into memory
+                frameCache = new byte[frameCount][];
+                await using var cacheStream = File.OpenRead(mjpegPath);
+
+                for (int i = 0; i < frameCount; i++)
+                {
+                    var frameSequence = frameKeys[i];
+                    var frame = metadata.Index[frameSequence];
+                    frameCache[i] = new byte[frame.Size];
+                    cacheStream.Position = (long)frame.Start;
+                    await cacheStream.ReadExactlyAsync(frameCache[i], ct);
+                }
             }
 
             // Calculate frame interval from recording
@@ -56,32 +87,35 @@ public static class MjpegEndpointExtensions
             context.Response.ContentType = "multipart/x-mixed-replace; boundary=frame";
             context.Response.Headers["Cache-Control"] = "no-cache";
 
-            var ct = context.RequestAborted;
-
-            await using var mjpegStream = File.OpenRead(mjpegPath);
+            await using var mjpegStream = useCache ? null : File.OpenRead(mjpegPath);
             using var timer = new PeriodicTimer(frameInterval);
 
-            var frameKeys = metadata.Index.Keys.ToArray();
             int frameIndex = 0;
 
-            while (!ct.IsCancellationRequested && await timer.WaitForNextTickAsync(ct))
+            // Send first frame immediately (don't wait for timer)
+            while (!ct.IsCancellationRequested)
             {
-                var frameSequence = frameKeys[frameIndex];
-                var frame = metadata.Index[frameSequence];
+                byte[] frameData;
 
-                // Read frame data
-                var frameData = new byte[frame.Size];
-                mjpegStream.Position = (long)frame.Start;
-                var bytesRead = await mjpegStream.ReadAsync(frameData.AsMemory(), ct);
+                if (useCache)
+                {
+                    frameData = frameCache![frameIndex];
+                }
+                else
+                {
+                    var frameSequence = frameKeys[frameIndex];
+                    var frame = metadata.Index[frameSequence];
+                    frameData = new byte[frame.Size];
+                    mjpegStream!.Position = (long)frame.Start;
+                    await mjpegStream.ReadExactlyAsync(frameData, ct);
+                }
 
-                if (bytesRead != (int)frame.Size)
-                    continue;
-
-                // Write multipart frame
                 await WriteMultipartFrameAsync(context.Response.Body, frameData, ct);
 
-                // Loop
-                frameIndex = (frameIndex + 1) % frameKeys.Length;
+                frameIndex = (frameIndex + 1) % frameCount;
+
+                if (!await timer.WaitForNextTickAsync(ct))
+                    break;
             }
         });
 

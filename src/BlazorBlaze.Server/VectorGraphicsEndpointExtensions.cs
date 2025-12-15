@@ -27,15 +27,32 @@ public static class VectorGraphicsEndpointExtensions
         string pattern,
         PatternType patternType)
     {
+        // For patterns that support dimensions via query string: ?width=1920&height=1080
+        if (patternType == PatternType.BouncingBall)
+        {
+            return app.MapVectorGraphicsEndpoint(pattern, async (IRemoteCanvasV2 canvas, HttpContext context, CancellationToken ct) =>
+            {
+                var width = GetQueryInt(context, "width", 1920);
+                var height = GetQueryInt(context, "height", 1080);
+                await TestPatterns.BouncingBallAsync(canvas, width, height, ct);
+            });
+        }
+
         Func<IRemoteCanvasV2, CancellationToken, Task> handler = patternType switch
         {
-            PatternType.BouncingBall => TestPatterns.BouncingBallAsync,
             PatternType.MultiLayer => TestPatterns.MultiLayerAsync,
             PatternType.Calibration => TestPatterns.CalibrationAsync,
             _ => throw new ArgumentOutOfRangeException(nameof(patternType), patternType, "Unknown pattern type")
         };
 
         return app.MapVectorGraphicsEndpoint(pattern, handler);
+    }
+
+    private static int GetQueryInt(HttpContext context, string key, int defaultValue)
+    {
+        if (context.Request.Query.TryGetValue(key, out var value) && int.TryParse(value, out var result))
+            return result;
+        return defaultValue;
     }
 
     /// <summary>

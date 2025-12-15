@@ -34,12 +34,11 @@ public enum PatternType
 /// </summary>
 public static class TestPatterns
 {
-    public static async Task BouncingBallAsync(IRemoteCanvasV2 canvas, CancellationToken ct)
+    public static async Task BouncingBallAsync(IRemoteCanvasV2 canvas, int width, int height, CancellationToken ct)
     {
-        float x = 600, y = 400;
+        float x = width / 2f, y = height / 2f;
         float dx = 4, dy = 3;
         const int radius = 30;
-        const int width = 1200, height = 800;
 
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(16));
 

@@ -1,0 +1,15 @@
+@page "/vector-test"
+@layout MudBlazorSample.Components.Layout.FullScreenLayout
+@using MudBlazorSample.Client.Components
+
+<PageTitle>MJPEG + Vector Overlay Test</PageTitle>
+
+<div style="position: relative; width: 1920px; height: 1080px; background: #000;">
+
+    <img src="/mjpeg/test-ball-mjpeg"
+         alt="MJPEG Stream"
+         style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain;" />
+
+    <VectorOverlay @rendermode="@(new InteractiveWebAssemblyRenderMode(prerender: false))"
+                   StreamPath="/ws/test-ball" />
+</div>

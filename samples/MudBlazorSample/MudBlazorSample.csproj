@@ -4,18 +4,17 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
-    <UserSecretsId>43150101-42e9-47e2-96cb-e90d6273997d</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" />
+    <PackageReference Include="MudBlazor" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SampleApp.Client\SampleApp.Client.csproj" />
+    <ProjectReference Include="..\MudBlazorSample.Client\MudBlazorSample.Client.csproj" />
     <ProjectReference Include="..\..\src\BlazorBlaze\BlazorBlaze.csproj" />
     <ProjectReference Include="..\..\src\BlazorBlaze.Server\BlazorBlaze.Server.csproj" />
   </ItemGroup>

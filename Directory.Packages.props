@@ -30,6 +30,9 @@
     <!-- Logging -->
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
 
+    <!-- UI Components -->
+    <PackageVersion Include="MudBlazor" Version="8.15.0" />
+
     <!-- ModelingEvolution -->
     <PackageVersion Include="ModelingEvolution.Drawing" Version="1.0.63.45" />
     <PackageVersion Include="ModelingEvolution.Bytes" Version="3.0.0" />

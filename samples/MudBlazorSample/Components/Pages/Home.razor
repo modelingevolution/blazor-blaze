@@ -1,0 +1,21 @@
+@page "/"
+
+<PageTitle>MudBlazor + BlazorBlaze Test</PageTitle>
+
+<MudText Typo="Typo.h3" GutterBottom="true">MudBlazor + BlazorBlaze Performance Test</MudText>
+
+<MudText Class="mb-4">
+    This sample tests VectorGraphics performance with MudBlazor loaded.
+</MudText>
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/vector-test">
+    Open Vector Test (Full Screen)
+</MudButton>
+
+<MudDivider Class="my-6" />
+
+<MudText Typo="Typo.h5" GutterBottom="true">Test Links</MudText>
+
+<MudList T="string" Dense="true">
+    <MudListItem Icon="@Icons.Material.Filled.PlayArrow" Href="/vector-test">MJPEG + Vector Overlay - Full screen test (SSR page + WASM component)</MudListItem>
+</MudList>
