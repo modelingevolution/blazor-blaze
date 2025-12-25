@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "design.md",
+                "file": "design-v3.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "design"
+              "title": "design-v3"
             }
           }
         ]
@@ -185,6 +185,7 @@
   },
   "active": "ab3fe495b7973b62",
   "lastOpenFiles": [
+    "design.md",
     "design-v3.md.tmp.928.1765793135432",
     "design-v3.md.tmp.928.1765793101877",
     "design-v3.md.tmp.928.1765792888508",
@@ -195,11 +196,9 @@
     "design.md.tmp.928.1765645857650",
     "design.md.tmp.928.1765636262447",
     "design-protocol-v2.md",
-    "design.md",
     "design.md.tmp.928.1765632641038",
     "archive-design-rendering-stream.md",
     "design.md.tmp.64971.1765533305170",
-    "design.md.tmp.64971.1765492391307",
     "design-rendering-stream.md",
     "design-vectorgraphics-streaming-v2.md",
     "design-stream-translators.md"

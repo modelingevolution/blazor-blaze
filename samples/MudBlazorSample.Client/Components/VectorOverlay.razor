@@ -31,7 +31,7 @@
 
     protected override void OnInitialized()
     {
-        _stream = new RenderingStreamV2(CanvasWidth, CanvasHeight, LoggerFactory);
+        _stream = RenderingStreamFactory.CreateVectorGraphicsStream(CanvasWidth, CanvasHeight, LoggerFactory);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
