@@ -32,9 +32,8 @@ public class RenderingStreamV2 : IRenderingStream
     
     /// <summary>
     /// Creates a RenderingStreamV2 with a custom decoder.
-    /// Use RenderingStreamBuilder for a fluent API.
     /// </summary>
-    internal RenderingStreamV2(
+    public RenderingStreamV2(
         RenderingStage stage,
         LayerPool layerPool,
         IFrameDecoder decoder,
