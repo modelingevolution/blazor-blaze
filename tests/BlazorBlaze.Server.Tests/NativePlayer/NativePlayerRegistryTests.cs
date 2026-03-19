@@ -56,7 +56,8 @@ public sealed class NativePlayerRegistryTests
         registry.ActivePlayerIds.Should().NotContain("vs-1");
     }
 
-    /// <summary>B-012: PostMessageAsync calls module-level postNativeMessage for registered player</summary>
+    /// <summary>B-012: PostMessageAsync calls module-level postNativeMessage for registered player
+    /// and forwards the message object as-is (not wrapped or transformed)</summary>
     [Fact]
     public async Task PostMessageAsync_CallsModuleLevelFunction()
     {
@@ -67,10 +68,12 @@ public sealed class NativePlayerRegistryTests
         var message = new { type = "play", id = "vs-1" };
         await registry.PostMessageAsync("vs-1", message);
 
-        await _jsModule.Received(1).InvokeVoidAsync("postNativeMessage", Arg.Any<object[]>());
+        await _jsModule.Received(1).InvokeVoidAsync("postNativeMessage",
+            Arg.Is<object[]>(args => args.Length == 1 && ReferenceEquals(args[0], message)));
     }
 
-    /// <summary>B-013: BroadcastAsync calls module-level postNativeMessage</summary>
+    /// <summary>B-013: BroadcastAsync calls module-level postNativeMessage
+    /// and forwards the message object as-is (not wrapped or transformed)</summary>
     [Fact]
     public async Task BroadcastAsync_CallsModuleLevelFunction()
     {
@@ -81,7 +84,8 @@ public sealed class NativePlayerRegistryTests
         var message = new { type = "set-overlay", name = "segmentation", visible = true };
         await registry.BroadcastAsync(message);
 
-        await _jsModule.Received(1).InvokeVoidAsync("postNativeMessage", Arg.Any<object[]>());
+        await _jsModule.Received(1).InvokeVoidAsync("postNativeMessage",
+            Arg.Is<object[]>(args => args.Length == 1 && ReferenceEquals(args[0], message)));
     }
 
     /// <summary>B-014: PostMessageAsync to unknown player - no exception, no JS call</summary>
