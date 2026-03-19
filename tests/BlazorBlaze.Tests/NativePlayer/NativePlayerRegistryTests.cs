@@ -6,20 +6,35 @@ namespace BlazorBlaze.Tests.NativePlayer;
 
 /// <summary>
 /// Tests B-010 through B-017: INativePlayerRegistry behavior.
+/// The registry now uses a module-level postNativeMessage function instead of
+/// per-adapter IJSObjectReference calls.
 /// </summary>
 public sealed class NativePlayerRegistryTests
 {
-    private static NativePlayerRegistration CreateRegistration(string playerId)
+    private readonly IJSRuntime _jsRuntime;
+    private readonly IJSObjectReference _jsModule;
+
+    public NativePlayerRegistryTests()
     {
-        var jsAdapter = Substitute.For<IJSObjectReference>();
-        return new NativePlayerRegistration(playerId, jsAdapter);
+        _jsRuntime = Substitute.For<IJSRuntime>();
+        _jsModule = Substitute.For<IJSObjectReference>();
+
+        // When the registry lazily imports the module, return our mock.
+        _jsRuntime
+            .InvokeAsync<IJSObjectReference>("import", Arg.Any<object[]>())
+            .Returns(ValueTask.FromResult(_jsModule));
     }
+
+    private NativePlayerRegistry CreateRegistry() => new(_jsRuntime);
+
+    private static NativePlayerRegistration CreateRegistration(string playerId)
+        => new(playerId);
 
     /// <summary>B-010: Register adds player to ActivePlayerIds</summary>
     [Fact]
     public void Register_AddsPlayerToActivePlayerIds()
     {
-        var registry = new NativePlayerRegistry();
+        var registry = CreateRegistry();
         var reg = CreateRegistration("vs-1");
 
         registry.Register(reg);
@@ -31,7 +46,7 @@ public sealed class NativePlayerRegistryTests
     [Fact]
     public void Unregister_RemovesPlayerFromActivePlayerIds()
     {
-        var registry = new NativePlayerRegistry();
+        var registry = CreateRegistry();
         var reg = CreateRegistration("vs-1");
         registry.Register(reg);
 
@@ -40,74 +55,66 @@ public sealed class NativePlayerRegistryTests
         registry.ActivePlayerIds.Should().NotContain("vs-1");
     }
 
-    /// <summary>B-012: PostMessageAsync sends to specific player only</summary>
+    /// <summary>B-012: PostMessageAsync calls module-level postNativeMessage for registered player</summary>
     [Fact]
-    public async Task PostMessageAsync_SendsToSpecificPlayerOnly()
+    public async Task PostMessageAsync_CallsModuleLevelFunction()
     {
-        var registry = new NativePlayerRegistry();
-        var reg1 = CreateRegistration("vs-1");
-        var reg2 = CreateRegistration("vs-2");
-        registry.Register(reg1);
-        registry.Register(reg2);
+        var registry = CreateRegistry();
+        registry.Register(CreateRegistration("vs-1"));
+        registry.Register(CreateRegistration("vs-2"));
 
         var message = new { type = "play", id = "vs-1" };
         await registry.PostMessageAsync("vs-1", message);
 
-        await reg1.JsAdapter.Received(1).InvokeVoidAsync("postMessage", Arg.Any<object[]>());
-        await reg2.JsAdapter.DidNotReceive().InvokeVoidAsync("postMessage", Arg.Any<object[]>());
+        await _jsModule.Received(1).InvokeVoidAsync("postNativeMessage", Arg.Any<object[]>());
     }
 
-    /// <summary>B-013: BroadcastAsync sends to all players</summary>
+    /// <summary>B-013: BroadcastAsync calls module-level postNativeMessage</summary>
     [Fact]
-    public async Task BroadcastAsync_SendsToAllPlayers()
+    public async Task BroadcastAsync_CallsModuleLevelFunction()
     {
-        var registry = new NativePlayerRegistry();
-        var reg1 = CreateRegistration("vs-1");
-        var reg2 = CreateRegistration("vs-2");
-        registry.Register(reg1);
-        registry.Register(reg2);
+        var registry = CreateRegistry();
+        registry.Register(CreateRegistration("vs-1"));
+        registry.Register(CreateRegistration("vs-2"));
 
         var message = new { type = "set-overlay", name = "segmentation", visible = true };
         await registry.BroadcastAsync(message);
 
-        await reg1.JsAdapter.Received(1).InvokeVoidAsync("postMessage", Arg.Any<object[]>());
-        await reg2.JsAdapter.Received(1).InvokeVoidAsync("postMessage", Arg.Any<object[]>());
+        await _jsModule.Received(1).InvokeVoidAsync("postNativeMessage", Arg.Any<object[]>());
     }
 
-    /// <summary>B-014: PostMessageAsync to unknown player - no exception</summary>
+    /// <summary>B-014: PostMessageAsync to unknown player - no exception, no JS call</summary>
     [Fact]
     public async Task PostMessageAsync_UnknownPlayerId_DoesNotThrow()
     {
-        var registry = new NativePlayerRegistry();
+        var registry = CreateRegistry();
 
         var act = () => registry.PostMessageAsync("nonexistent", new { type = "play" }).AsTask();
 
         await act.Should().NotThrowAsync();
+        await _jsModule.DidNotReceive().InvokeVoidAsync("postNativeMessage", Arg.Any<object[]>());
     }
 
     /// <summary>B-015: Duplicate register with same ID replaces previous</summary>
     [Fact]
-    public async Task Register_DuplicateId_ReplacesPrevious()
+    public void Register_DuplicateId_ReplacesPrevious()
     {
-        var registry = new NativePlayerRegistry();
+        var registry = CreateRegistry();
         var reg1 = CreateRegistration("vs-1");
         var reg2 = CreateRegistration("vs-1");
         registry.Register(reg1);
         registry.Register(reg2);
 
-        var message = new { type = "play", id = "vs-1" };
-        await registry.PostMessageAsync("vs-1", message);
-
-        // Only the second adapter should receive the message.
-        await reg2.JsAdapter.Received(1).InvokeVoidAsync("postMessage", Arg.Any<object[]>());
-        await reg1.JsAdapter.DidNotReceive().InvokeVoidAsync("postMessage", Arg.Any<object[]>());
+        // Only one entry should exist.
+        registry.ActivePlayerIds.Should().HaveCount(1);
+        registry.ActivePlayerIds.Should().Contain("vs-1");
     }
 
     /// <summary>B-016: Unregister unknown ID - no exception</summary>
     [Fact]
     public void Unregister_UnknownId_DoesNotThrow()
     {
-        var registry = new NativePlayerRegistry();
+        var registry = CreateRegistry();
 
         var act = () => registry.Unregister("nonexistent");
 
@@ -118,7 +125,7 @@ public sealed class NativePlayerRegistryTests
     [Fact]
     public async Task ConcurrentRegisterUnregister_ThreadSafe()
     {
-        var registry = new NativePlayerRegistry();
+        var registry = CreateRegistry();
         var tasks = new List<Task>();
 
         for (int i = 0; i < 100; i++)
@@ -149,7 +156,7 @@ public sealed class NativePlayerRegistryTests
     [Fact]
     public void Register_FiresPlayerRegisteredEvent()
     {
-        var registry = new NativePlayerRegistry();
+        var registry = CreateRegistry();
         var reg = CreateRegistration("vs-1");
         NativePlayerRegistration? received = null;
         registry.PlayerRegistered += r => received = r;
@@ -164,7 +171,7 @@ public sealed class NativePlayerRegistryTests
     [Fact]
     public void Unregister_FiresPlayerUnregisteredEvent()
     {
-        var registry = new NativePlayerRegistry();
+        var registry = CreateRegistry();
         var reg = CreateRegistration("vs-1");
         registry.Register(reg);
         string? removedId = null;
@@ -175,35 +182,61 @@ public sealed class NativePlayerRegistryTests
         removedId.Should().Be("vs-1");
     }
 
-    /// <summary>PostMessageAsync catches JSDisconnectedException</summary>
+    /// <summary>PostMessageAsync catches JSDisconnectedException from module call</summary>
     [Fact]
     public async Task PostMessageAsync_CatchesJSDisconnectedException()
     {
-        var registry = new NativePlayerRegistry();
-        var reg = CreateRegistration("vs-1");
-        reg.JsAdapter
-            .When(x => x.InvokeVoidAsync("postMessage", Arg.Any<object[]>()))
+        var registry = CreateRegistry();
+        registry.Register(CreateRegistration("vs-1"));
+
+        _jsModule
+            .When(x => x.InvokeVoidAsync("postNativeMessage", Arg.Any<object[]>()))
             .Do(_ => throw new JSDisconnectedException("disconnected"));
-        registry.Register(reg);
 
         var act = () => registry.PostMessageAsync("vs-1", new { type = "play" }).AsTask();
 
         await act.Should().NotThrowAsync();
     }
 
-    /// <summary>PostMessageAsync catches InvalidOperationException</summary>
+    /// <summary>PostMessageAsync catches InvalidOperationException from module call</summary>
     [Fact]
     public async Task PostMessageAsync_CatchesInvalidOperationException()
     {
-        var registry = new NativePlayerRegistry();
-        var reg = CreateRegistration("vs-1");
-        reg.JsAdapter
-            .When(x => x.InvokeVoidAsync("postMessage", Arg.Any<object[]>()))
+        var registry = CreateRegistry();
+        registry.Register(CreateRegistration("vs-1"));
+
+        _jsModule
+            .When(x => x.InvokeVoidAsync("postNativeMessage", Arg.Any<object[]>()))
             .Do(_ => throw new InvalidOperationException("runtime unavailable"));
-        registry.Register(reg);
 
         var act = () => registry.PostMessageAsync("vs-1", new { type = "play" }).AsTask();
 
         await act.Should().NotThrowAsync();
+    }
+
+    /// <summary>BroadcastAsync skips JS call when no players registered</summary>
+    [Fact]
+    public async Task BroadcastAsync_NoPlayers_DoesNotCallJs()
+    {
+        var registry = CreateRegistry();
+
+        await registry.BroadcastAsync(new { type = "test" });
+
+        await _jsModule.DidNotReceive().InvokeVoidAsync("postNativeMessage", Arg.Any<object[]>());
+    }
+
+    /// <summary>DisposeAsync disposes the JS module reference</summary>
+    [Fact]
+    public async Task DisposeAsync_DisposesModuleReference()
+    {
+        var registry = CreateRegistry();
+        registry.Register(CreateRegistration("vs-1"));
+
+        // Trigger module import by calling PostMessageAsync.
+        await registry.PostMessageAsync("vs-1", new { type = "play" });
+
+        await registry.DisposeAsync();
+
+        await _jsModule.Received(1).DisposeAsync();
     }
 }

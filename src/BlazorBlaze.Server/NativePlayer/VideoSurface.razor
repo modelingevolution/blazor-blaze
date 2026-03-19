@@ -97,7 +97,7 @@ else
         await _jsAdapter.InvokeVoidAsync("init", StreamUrl);
         await _jsAdapter.InvokeVoidAsync("play");
 
-        Registry.Register(new NativePlayerRegistration(_resolvedPlayerId!, _jsAdapter));
+        Registry.Register(new NativePlayerRegistration(_resolvedPlayerId!));
     }
 
     public async ValueTask DisposeAsync()

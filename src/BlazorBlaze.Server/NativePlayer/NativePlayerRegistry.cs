@@ -8,11 +8,20 @@ namespace BlazorBlaze.Server.NativePlayer;
 /// Thread-safe via ConcurrentDictionary. ActivePlayerIds is a pre-built
 /// snapshot (string[]) swapped atomically on Register/Unregister to avoid
 /// per-access allocation.
+/// Uses a single lazily-imported JS module for posting messages to the native
+/// layer instead of per-adapter IJSObjectReference calls.
 /// </summary>
 public sealed class NativePlayerRegistry : INativePlayerRegistry
 {
     private readonly ConcurrentDictionary<string, NativePlayerRegistration> _players = new();
+    private readonly IJSRuntime _jsRuntime;
+    private IJSObjectReference? _module;
     private string[] _activePlayerIds = [];
+
+    public NativePlayerRegistry(IJSRuntime jsRuntime)
+    {
+        _jsRuntime = jsRuntime;
+    }
 
     public IReadOnlyList<string> ActivePlayerIds => Volatile.Read(ref _activePlayerIds);
 
@@ -42,12 +51,13 @@ public sealed class NativePlayerRegistry : INativePlayerRegistry
 
     public async ValueTask PostMessageAsync(string playerId, object message)
     {
-        if (!_players.TryGetValue(playerId, out var registration))
+        if (!_players.ContainsKey(playerId))
             return;
 
         try
         {
-            await registration.JsAdapter.InvokeVoidAsync("postMessage", message);
+            var module = await EnsureModuleAsync();
+            await module.InvokeVoidAsync("postNativeMessage", message);
         }
         catch (JSDisconnectedException)
         {
@@ -61,11 +71,37 @@ public sealed class NativePlayerRegistry : INativePlayerRegistry
 
     public async ValueTask BroadcastAsync(object message)
     {
-        foreach (var registration in _players.Values)
+        if (_players.IsEmpty)
+            return;
+
+        try
+        {
+            var module = await EnsureModuleAsync();
+            await module.InvokeVoidAsync("postNativeMessage", message);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected — silently ignore.
+        }
+        catch (InvalidOperationException)
+        {
+            // JS runtime unavailable — silently ignore.
+        }
+    }
+
+    private async ValueTask<IJSObjectReference> EnsureModuleAsync()
+    {
+        return _module ??= await _jsRuntime.InvokeAsync<IJSObjectReference>(
+            "import", "./_content/BlazorBlaze.Server/video-surface.js");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
         {
             try
             {
-                await registration.JsAdapter.InvokeVoidAsync("postMessage", message);
+                await _module.DisposeAsync();
             }
             catch (JSDisconnectedException)
             {

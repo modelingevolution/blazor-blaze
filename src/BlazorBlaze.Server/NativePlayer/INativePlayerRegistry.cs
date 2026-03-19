@@ -1,10 +1,10 @@
 namespace BlazorBlaze.Server.NativePlayer;
 
 /// <summary>
-/// Tracks active VideoSurface instances and provides messaging to native player JS adapters.
-/// Scoped per Blazor circuit.
+/// Tracks active VideoSurface instances and provides messaging to native player via a
+/// module-level JS function. Scoped per Blazor circuit.
 /// </summary>
-public interface INativePlayerRegistry
+public interface INativePlayerRegistry : IAsyncDisposable
 {
     /// <summary>
     /// Registers a native player instance. Fires <see cref="PlayerRegistered"/> after registration.
@@ -18,7 +18,7 @@ public interface INativePlayerRegistry
     void Unregister(string playerId);
 
     /// <summary>
-    /// Sends a message to a specific native player via its JS adapter.
+    /// Sends a message to a specific native player via the module-level postNativeMessage function.
     /// No-op if the player ID is not found.
     /// </summary>
     ValueTask PostMessageAsync(string playerId, object message);

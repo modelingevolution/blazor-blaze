@@ -3,6 +3,21 @@
 
 const _activeAdapters = new Set();
 
+/**
+ * Posts a message to the native WebKitGTK message handler.
+ * Used both by the adapter internally and by the registry via module-level export.
+ * @param {object} message - The message to send.
+ */
+export function postNativeMessage(message) {
+    try {
+        if (window.webkit?.messageHandlers?.native) {
+            window.webkit.messageHandlers.native.postMessage(JSON.stringify(message));
+        }
+    } catch (_) {
+        // Not in WebKitGTK — silently no-op.
+    }
+}
+
 class NativePlayerAdapter {
     #element;
     #playerId;
@@ -22,7 +37,7 @@ class NativePlayerAdapter {
         const rect = this.#getRect();
         this.#lastRect = rect;
 
-        this.#sendNative({
+        postNativeMessage({
             type: "init",
             id: this.#playerId,
             position: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
@@ -37,37 +52,37 @@ class NativePlayerAdapter {
     }
 
     play() {
-        this.#sendNative({ type: "play", id: this.#playerId });
+        postNativeMessage({ type: "play", id: this.#playerId });
     }
 
     pause() {
-        this.#sendNative({ type: "pause", id: this.#playerId });
+        postNativeMessage({ type: "pause", id: this.#playerId });
     }
 
     resume() {
-        this.#sendNative({ type: "resume", id: this.#playerId });
+        postNativeMessage({ type: "resume", id: this.#playerId });
     }
 
     refresh() {
-        this.#sendNative({ type: "refresh", id: this.#playerId });
+        postNativeMessage({ type: "refresh", id: this.#playerId });
     }
 
     destroy() {
         if (this.#destroyed) return;
         this.#destroyed = true;
 
-        this.#sendNative({ type: "destroy-player", id: this.#playerId });
+        postNativeMessage({ type: "destroy-player", id: this.#playerId });
         this.#stopPositionTracking();
         _activeAdapters.delete(this);
     }
 
     postMessage(msg) {
-        this.#sendNative(msg);
+        postNativeMessage(msg);
     }
 
     setBackgroundColor(color) {
         this.#backgroundColor = color;
-        this.#sendNative({ type: "set-background-color", color: color });
+        postNativeMessage({ type: "set-background-color", color: color });
     }
 
     getBackgroundColor() {
@@ -134,7 +149,7 @@ class NativePlayerAdapter {
         }
 
         this.#lastRect = rect;
-        this.#sendNative({
+        postNativeMessage({
             type: "set-layout",
             id: this.#playerId,
             x: rect.x,
@@ -152,18 +167,6 @@ class NativePlayerAdapter {
             width: Math.round(r.width),
             height: Math.round(r.height)
         };
-    }
-
-    #sendNative(msg) {
-        try {
-            if (window.webkit &&
-                window.webkit.messageHandlers &&
-                window.webkit.messageHandlers.native) {
-                window.webkit.messageHandlers.native.postMessage(JSON.stringify(msg));
-            }
-        } catch (_) {
-            // Not in WebKitGTK — silently no-op.
-        }
     }
 }
 

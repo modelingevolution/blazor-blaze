@@ -1,10 +1,6 @@
-using Microsoft.JSInterop;
-
 namespace BlazorBlaze.Server.NativePlayer;
 
 /// <summary>
-/// Represents a registered native player instance with its JS adapter reference.
+/// Represents a registered native player instance.
 /// </summary>
-public sealed record NativePlayerRegistration(
-    string PlayerId,
-    IJSObjectReference JsAdapter);
+public sealed record NativePlayerRegistration(string PlayerId);

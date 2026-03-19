@@ -23,7 +23,9 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         kioskDetector.IsKiosk.Returns(true);
         Services.AddSingleton(kioskDetector);
 
-        _registry = new NativePlayerRegistry();
+        // Registry now requires IJSRuntime. Use a substitute since these tests
+        // verify VideoSurface component behavior, not registry JS calls.
+        _registry = new NativePlayerRegistry(Substitute.For<IJSRuntime>());
         Services.AddSingleton<INativePlayerRegistry>(_registry);
 
         // Setup bUnit JS interop chain.
@@ -129,9 +131,9 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         _registry.ActivePlayerIds.Should().Contain("test-player");
     }
 
-    /// <summary>B-046: Registration includes a valid JS adapter reference</summary>
+    /// <summary>B-046: Registration includes a valid player ID</summary>
     [Fact]
-    public void KioskMode_RegistrationIncludesJsAdapterReference()
+    public void KioskMode_RegistrationIncludesPlayerId()
     {
         NativePlayerRegistration? received = null;
         _registry.PlayerRegistered += r => received = r;
@@ -142,7 +144,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
 
         received.Should().NotBeNull();
         received!.PlayerId.Should().Be("test-player");
-        received.JsAdapter.Should().NotBeNull();
     }
 
     /// <summary>B-047: DisposeAsync catches JSDisconnectedException without propagating.</summary>
@@ -154,7 +155,8 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         var kioskDetector = Substitute.For<IKioskDetector>();
         kioskDetector.IsKiosk.Returns(true);
         ctx.Services.AddSingleton(kioskDetector);
-        ctx.Services.AddSingleton<INativePlayerRegistry>(new NativePlayerRegistry());
+        ctx.Services.AddSingleton<INativePlayerRegistry>(
+            new NativePlayerRegistry(Substitute.For<IJSRuntime>()));
 
         var moduleInterop = ctx.JSInterop.SetupModule("./_content/BlazorBlaze.Server/video-surface.js");
         moduleInterop.Mode = JSRuntimeMode.Loose;
