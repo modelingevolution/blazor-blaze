@@ -175,12 +175,13 @@ public sealed class NativePlayerRegistryTests
         var registry = CreateRegistry();
         var reg = CreateRegistration("vs-1");
         registry.Register(reg);
-        string? removedId = null;
-        registry.PlayerUnregistered += id => removedId = id;
+        NativePlayerRegistration? removed = null;
+        registry.PlayerUnregistered += r => removed = r;
 
         registry.Unregister("vs-1");
 
-        removedId.Should().Be("vs-1");
+        removed.Should().NotBeNull();
+        removed!.PlayerId.Should().Be("vs-1");
     }
 
     /// <summary>PostMessageAsync catches JSDisconnectedException from module call</summary>

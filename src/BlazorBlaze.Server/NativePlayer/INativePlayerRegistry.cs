@@ -42,5 +42,5 @@ public interface INativePlayerRegistry : IAsyncDisposable
     /// <summary>
     /// Raised synchronously after a player is unregistered.
     /// </summary>
-    event Action<string>? PlayerUnregistered;
+    event Action<NativePlayerRegistration>? PlayerUnregistered;
 }

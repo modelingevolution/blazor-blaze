@@ -31,7 +31,7 @@ public sealed class NativePlayerRegistry : INativePlayerRegistry
     public IReadOnlyList<string> ActivePlayerIds => Volatile.Read(ref _activePlayerIds);
 
     public event Action<NativePlayerRegistration>? PlayerRegistered;
-    public event Action<string>? PlayerUnregistered;
+    public event Action<NativePlayerRegistration>? PlayerUnregistered;
 
     public void Register(NativePlayerRegistration registration)
     {
@@ -42,10 +42,10 @@ public sealed class NativePlayerRegistry : INativePlayerRegistry
 
     public void Unregister(string playerId)
     {
-        if (_players.TryRemove(playerId, out _))
+        if (_players.TryRemove(playerId, out var registration))
         {
             RebuildActivePlayerIds();
-            PlayerUnregistered?.Invoke(playerId);
+            PlayerUnregistered?.Invoke(registration);
         }
     }
 

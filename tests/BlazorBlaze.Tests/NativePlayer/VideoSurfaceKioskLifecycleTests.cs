@@ -296,7 +296,7 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
     public async Task KioskMode_PlayerUnregisteredEventFires()
     {
         string? unregisteredId = null;
-        _registry.PlayerUnregistered += id => unregisteredId = id;
+        _registry.PlayerUnregistered += r => unregisteredId = r.PlayerId;
 
         var cut = Render<VideoSurface>(p => p
             .Add(vs => vs.StreamUrl, "http://localhost/stream")
