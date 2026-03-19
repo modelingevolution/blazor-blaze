@@ -6,15 +6,15 @@
 @inject IJSRuntime JsRuntime
 @inject ILogger<VideoSurface> Logger
 
-@if (!KioskDetector.IsKiosk)
-{
-    <img src="@StreamUrl" style="@Style" class="@Class" alt="@Alt" />
-}
-else
+@if (KioskDetector.IsKiosk)
 {
     <div @ref="_placeholderRef"
          style="visibility:hidden; opacity:0; width:@(Width)px; height:@(Height)px; @Style">
     </div>
+}
+else
+{
+    <img src="@StreamUrl" style="@Style" class="@Class" alt="@Alt" />
 }
 
 @code {
