@@ -14,6 +14,8 @@ namespace BlazorBlaze.Server.NativePlayer;
 /// </summary>
 public sealed class NativePlayerRegistry : INativePlayerRegistry
 {
+    internal const string ModulePath = "./_content/BlazorBlaze.Server/video-surface.js";
+
     private readonly ConcurrentDictionary<string, NativePlayerRegistration> _players = new();
     private readonly IJSRuntime _jsRuntime;
     private readonly ILogger<NativePlayerRegistry> _logger;
@@ -95,7 +97,7 @@ public sealed class NativePlayerRegistry : INativePlayerRegistry
     private async ValueTask<IJSObjectReference> EnsureModuleAsync()
     {
         return _module ??= await _jsRuntime.InvokeAsync<IJSObjectReference>(
-            "import", "./_content/BlazorBlaze.Server/video-surface.js");
+            "import", ModulePath);
     }
 
     public async ValueTask DisposeAsync()

@@ -85,7 +85,7 @@ else
             return;
 
         _jsModule = await JsRuntime.InvokeAsync<IJSObjectReference>(
-            "import", "./_content/BlazorBlaze.Server/video-surface.js");
+            "import", NativePlayerRegistry.ModulePath);
 
         _jsAdapter = await _jsModule.InvokeAsync<IJSObjectReference>(
             "createAdapter", _placeholderRef, _resolvedPlayerId);
