@@ -13,18 +13,11 @@ public static class NativePlayerServiceExtensions
     /// Registers IKioskDetector, INativePlayerRegistry, and IHttpContextAccessor.
     /// Apps that don't call this method pay zero overhead.
     /// </summary>
-    public static IServiceCollection AddNativePlayer(
-        this IServiceCollection services,
-        Action<KioskDetectorOptions>? configure = null)
+    public static IServiceCollection AddNativePlayer(this IServiceCollection services)
     {
         services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
         services.AddScoped<IKioskDetector, KioskDetector>();
         services.AddScoped<INativePlayerRegistry, NativePlayerRegistry>();
-
-        if (configure is not null)
-            services.Configure(configure);
-        else
-            services.Configure<KioskDetectorOptions>(_ => { });
 
         return services;
     }
