@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NSubstitute;
 
-namespace BlazorBlaze.Tests.NativePlayer;
+namespace BlazorBlaze.Server.Tests.NativePlayer;
 
 /// <summary>
 /// Tests B-040 through B-052: VideoSurface kiosk mode lifecycle and background color.

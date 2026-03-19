@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NSubstitute;
 
-namespace BlazorBlaze.Tests.NativePlayer;
+namespace BlazorBlaze.Server.Tests.NativePlayer;
 
 /// <summary>
 /// Tests B-010 through B-017: INativePlayerRegistry behavior.

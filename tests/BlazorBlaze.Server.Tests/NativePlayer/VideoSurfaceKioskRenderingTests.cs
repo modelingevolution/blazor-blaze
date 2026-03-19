@@ -3,7 +3,7 @@ using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
-namespace BlazorBlaze.Tests.NativePlayer;
+namespace BlazorBlaze.Server.Tests.NativePlayer;
 
 /// <summary>
 /// Tests B-030 through B-034: VideoSurface kiosk mode rendering.

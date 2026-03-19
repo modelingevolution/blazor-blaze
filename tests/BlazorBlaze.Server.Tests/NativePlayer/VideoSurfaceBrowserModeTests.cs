@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using NSubstitute;
 
-namespace BlazorBlaze.Tests.NativePlayer;
+namespace BlazorBlaze.Server.Tests.NativePlayer;
 
 /// <summary>
 /// Tests B-020 through B-024: VideoSurface browser mode (IsKiosk == false).

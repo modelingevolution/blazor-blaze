@@ -2,7 +2,7 @@ using BlazorBlaze.Server.NativePlayer;
 using Microsoft.AspNetCore.Http;
 using NSubstitute;
 
-namespace BlazorBlaze.Tests.NativePlayer;
+namespace BlazorBlaze.Server.Tests.NativePlayer;
 
 /// <summary>
 /// Tests B-001 through B-007: IKioskDetector behavior.
