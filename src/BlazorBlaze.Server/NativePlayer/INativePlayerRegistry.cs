@@ -30,8 +30,9 @@ public interface INativePlayerRegistry
 
     /// <summary>
     /// Returns the IDs of all currently registered players.
+    /// Returns a pre-built snapshot; no allocation on access.
     /// </summary>
-    IReadOnlyCollection<string> ActivePlayerIds { get; }
+    IReadOnlyList<string> ActivePlayerIds { get; }
 
     /// <summary>
     /// Raised synchronously after a player is registered.

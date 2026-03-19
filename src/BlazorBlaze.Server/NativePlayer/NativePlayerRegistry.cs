@@ -5,13 +5,16 @@ namespace BlazorBlaze.Server.NativePlayer;
 
 /// <summary>
 /// Scoped registry of active native player instances.
-/// Thread-safe via ConcurrentDictionary.
+/// Thread-safe via ConcurrentDictionary. ActivePlayerIds is a pre-built
+/// snapshot (string[]) swapped atomically on Register/Unregister to avoid
+/// per-access allocation.
 /// </summary>
 public sealed class NativePlayerRegistry : INativePlayerRegistry
 {
     private readonly ConcurrentDictionary<string, NativePlayerRegistration> _players = new();
+    private string[] _activePlayerIds = [];
 
-    public IReadOnlyCollection<string> ActivePlayerIds => (IReadOnlyCollection<string>)_players.Keys;
+    public IReadOnlyList<string> ActivePlayerIds => Volatile.Read(ref _activePlayerIds);
 
     public event Action<NativePlayerRegistration>? PlayerRegistered;
     public event Action<string>? PlayerUnregistered;
@@ -19,6 +22,7 @@ public sealed class NativePlayerRegistry : INativePlayerRegistry
     public void Register(NativePlayerRegistration registration)
     {
         _players[registration.PlayerId] = registration;
+        RebuildActivePlayerIds();
         PlayerRegistered?.Invoke(registration);
     }
 
@@ -26,8 +30,14 @@ public sealed class NativePlayerRegistry : INativePlayerRegistry
     {
         if (_players.TryRemove(playerId, out _))
         {
+            RebuildActivePlayerIds();
             PlayerUnregistered?.Invoke(playerId);
         }
+    }
+
+    private void RebuildActivePlayerIds()
+    {
+        Volatile.Write(ref _activePlayerIds, [.. _players.Keys]);
     }
 
     public async ValueTask PostMessageAsync(string playerId, object message)
