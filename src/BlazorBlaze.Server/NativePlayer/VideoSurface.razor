@@ -1,0 +1,146 @@
+@using Microsoft.Extensions.Logging
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
+@inject IKioskDetector KioskDetector
+@inject INativePlayerRegistry Registry
+@inject IJSRuntime JsRuntime
+@inject ILogger<VideoSurface> Logger
+
+@if (KioskDetector.IsKiosk)
+{
+    <div @ref="_placeholderRef"
+         style="visibility:hidden; opacity:0; width:@(Width)px; height:@(Height)px; @Style">
+    </div>
+}
+else
+{
+    <img src="@StreamUrl" style="@Style" class="@Class" alt="@Alt" />
+}
+
+@code {
+    private static int _nextId;
+
+    private ElementReference _placeholderRef;
+    private IJSObjectReference? _jsModule;
+    private IJSObjectReference? _jsAdapter;
+    private string? _resolvedPlayerId;
+    private string? _previousBackgroundColor;
+
+    /// <summary>
+    /// MJPEG URL (img src in browser mode, init message in kiosk mode).
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string StreamUrl { get; set; } = default!;
+
+    /// <summary>
+    /// Unique player ID. Auto-generated if not provided.
+    /// </summary>
+    [Parameter]
+    public string? PlayerId { get; set; }
+
+    /// <summary>
+    /// Pixel width for placeholder sizing.
+    /// </summary>
+    [Parameter]
+    public int Width { get; set; } = 1920;
+
+    /// <summary>
+    /// Pixel height for placeholder sizing.
+    /// </summary>
+    [Parameter]
+    public int Height { get; set; } = 1080;
+
+    /// <summary>
+    /// CSS style applied to both img and placeholder.
+    /// </summary>
+    [Parameter]
+    public string? Style { get; set; }
+
+    /// <summary>
+    /// CSS class applied to img element (browser mode only).
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    /// <summary>
+    /// Alt text for img element.
+    /// </summary>
+    [Parameter]
+    public string Alt { get; set; } = "Video stream";
+
+    /// <summary>
+    /// Override native player background color on init, restore on dispose.
+    /// </summary>
+    [Parameter]
+    public string? BackgroundColor { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _resolvedPlayerId = PlayerId ?? $"vs-{Interlocked.Increment(ref _nextId)}";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !KioskDetector.IsKiosk)
+            return;
+
+        _jsModule = await JsRuntime.InvokeAsync<IJSObjectReference>(
+            "import", NativePlayerRegistry.ModulePath);
+
+        _jsAdapter = await _jsModule.InvokeAsync<IJSObjectReference>(
+            "createAdapter", _placeholderRef, _resolvedPlayerId);
+
+        if (BackgroundColor is not null)
+        {
+            _previousBackgroundColor = await _jsAdapter.InvokeAsync<string>("getBackgroundColor");
+            await _jsAdapter.InvokeVoidAsync("setBackgroundColor", BackgroundColor);
+        }
+
+        await _jsAdapter.InvokeVoidAsync("init", StreamUrl);
+        await _jsAdapter.InvokeVoidAsync("play");
+
+        Registry.Register(new NativePlayerRegistration(_resolvedPlayerId!));
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!KioskDetector.IsKiosk || _jsAdapter is null)
+            return;
+
+        try
+        {
+            Registry.Unregister(_resolvedPlayerId!);
+
+            if (_previousBackgroundColor is not null)
+            {
+                await _jsAdapter.InvokeVoidAsync("setBackgroundColor", _previousBackgroundColor);
+            }
+
+            await _jsAdapter.InvokeVoidAsync("destroy");
+        }
+        catch (JSDisconnectedException ex)
+        {
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: circuit disconnected during dispose", _resolvedPlayerId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: JS runtime unavailable during dispose", _resolvedPlayerId);
+        }
+
+        try
+        {
+            if (_jsAdapter is not null)
+                await _jsAdapter.DisposeAsync();
+            if (_jsModule is not null)
+                await _jsModule.DisposeAsync();
+        }
+        catch (JSDisconnectedException ex)
+        {
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: circuit disconnected during JS cleanup", _resolvedPlayerId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: JS runtime unavailable during JS cleanup", _resolvedPlayerId);
+        }
+    }
+}
