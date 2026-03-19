@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\BlazorBlaze\BlazorBlaze.csproj" />
+    <ProjectReference Include="..\..\src\BlazorBlaze.Server\BlazorBlaze.Server.csproj" />
   </ItemGroup>
 
   <ItemGroup>
