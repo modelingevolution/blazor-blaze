@@ -1,4 +1,5 @@
 using BlazorBlaze.Server.NativePlayer;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NSubstitute;
 
@@ -25,7 +26,7 @@ public sealed class NativePlayerRegistryTests
             .Returns(ValueTask.FromResult(_jsModule));
     }
 
-    private NativePlayerRegistry CreateRegistry() => new(_jsRuntime);
+    private NativePlayerRegistry CreateRegistry() => new(_jsRuntime, Substitute.For<ILogger<NativePlayerRegistry>>());
 
     private static NativePlayerRegistration CreateRegistration(string playerId)
         => new(playerId);

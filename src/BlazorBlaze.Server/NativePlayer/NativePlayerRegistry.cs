@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 
 namespace BlazorBlaze.Server.NativePlayer;
@@ -15,12 +16,14 @@ public sealed class NativePlayerRegistry : INativePlayerRegistry
 {
     private readonly ConcurrentDictionary<string, NativePlayerRegistration> _players = new();
     private readonly IJSRuntime _jsRuntime;
+    private readonly ILogger<NativePlayerRegistry> _logger;
     private IJSObjectReference? _module;
     private string[] _activePlayerIds = [];
 
-    public NativePlayerRegistry(IJSRuntime jsRuntime)
+    public NativePlayerRegistry(IJSRuntime jsRuntime, ILogger<NativePlayerRegistry> logger)
     {
         _jsRuntime = jsRuntime;
+        _logger = logger;
     }
 
     public IReadOnlyList<string> ActivePlayerIds => Volatile.Read(ref _activePlayerIds);
@@ -59,13 +62,13 @@ public sealed class NativePlayerRegistry : INativePlayerRegistry
             var module = await EnsureModuleAsync();
             await module.InvokeVoidAsync("postNativeMessage", message);
         }
-        catch (JSDisconnectedException)
+        catch (JSDisconnectedException ex)
         {
-            // Circuit disconnected — silently ignore.
+            _logger.LogDebug(ex, "Registry: circuit disconnected during PostMessageAsync for {PlayerId}", playerId);
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
-            // JS runtime unavailable — silently ignore.
+            _logger.LogDebug(ex, "Registry: JS runtime unavailable during PostMessageAsync for {PlayerId}", playerId);
         }
     }
 
@@ -79,13 +82,13 @@ public sealed class NativePlayerRegistry : INativePlayerRegistry
             var module = await EnsureModuleAsync();
             await module.InvokeVoidAsync("postNativeMessage", message);
         }
-        catch (JSDisconnectedException)
+        catch (JSDisconnectedException ex)
         {
-            // Circuit disconnected — silently ignore.
+            _logger.LogDebug(ex, "Registry: circuit disconnected during BroadcastAsync");
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
-            // JS runtime unavailable — silently ignore.
+            _logger.LogDebug(ex, "Registry: JS runtime unavailable during BroadcastAsync");
         }
     }
 
@@ -103,13 +106,13 @@ public sealed class NativePlayerRegistry : INativePlayerRegistry
             {
                 await _module.DisposeAsync();
             }
-            catch (JSDisconnectedException)
+            catch (JSDisconnectedException ex)
             {
-                // Circuit disconnected — silently ignore.
+                _logger.LogDebug(ex, "Registry: circuit disconnected during DisposeAsync");
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException ex)
             {
-                // JS runtime unavailable — silently ignore.
+                _logger.LogDebug(ex, "Registry: JS runtime unavailable during DisposeAsync");
             }
         }
     }

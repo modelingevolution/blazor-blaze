@@ -1,8 +1,10 @@
+@using Microsoft.Extensions.Logging
 @using Microsoft.JSInterop
 @implements IAsyncDisposable
 @inject IKioskDetector KioskDetector
 @inject INativePlayerRegistry Registry
 @inject IJSRuntime JsRuntime
+@inject ILogger<VideoSurface> Logger
 
 @if (!KioskDetector.IsKiosk)
 {
@@ -116,13 +118,13 @@ else
 
             await _jsAdapter.InvokeVoidAsync("destroy");
         }
-        catch (JSDisconnectedException)
+        catch (JSDisconnectedException ex)
         {
-            // Circuit disconnected — silently ignore.
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: circuit disconnected during dispose", _resolvedPlayerId);
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
-            // JS runtime unavailable — silently ignore.
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: JS runtime unavailable during dispose", _resolvedPlayerId);
         }
 
         try
@@ -132,13 +134,13 @@ else
             if (_jsModule is not null)
                 await _jsModule.DisposeAsync();
         }
-        catch (JSDisconnectedException)
+        catch (JSDisconnectedException ex)
         {
-            // Circuit disconnected — silently ignore.
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: circuit disconnected during JS cleanup", _resolvedPlayerId);
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
-            // JS runtime unavailable — silently ignore.
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: JS runtime unavailable during JS cleanup", _resolvedPlayerId);
         }
     }
 }

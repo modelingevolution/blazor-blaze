@@ -1,6 +1,7 @@
 using BlazorBlaze.Server.NativePlayer;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using NSubstitute;
 
@@ -25,7 +26,7 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
 
         // Registry now requires IJSRuntime. Use a substitute since these tests
         // verify VideoSurface component behavior, not registry JS calls.
-        _registry = new NativePlayerRegistry(Substitute.For<IJSRuntime>());
+        _registry = new NativePlayerRegistry(Substitute.For<IJSRuntime>(), Substitute.For<ILogger<NativePlayerRegistry>>());
         Services.AddSingleton<INativePlayerRegistry>(_registry);
 
         // Setup bUnit JS interop chain.
@@ -156,7 +157,7 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         kioskDetector.IsKiosk.Returns(true);
         ctx.Services.AddSingleton(kioskDetector);
         ctx.Services.AddSingleton<INativePlayerRegistry>(
-            new NativePlayerRegistry(Substitute.For<IJSRuntime>()));
+            new NativePlayerRegistry(Substitute.For<IJSRuntime>(), Substitute.For<ILogger<NativePlayerRegistry>>()));
 
         var moduleInterop = ctx.JSInterop.SetupModule("./_content/BlazorBlaze.Server/video-surface.js");
         moduleInterop.Mode = JSRuntimeMode.Loose;
