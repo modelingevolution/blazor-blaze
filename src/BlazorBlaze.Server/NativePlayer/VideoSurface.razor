@@ -126,6 +126,10 @@ else
         {
             Logger.LogDebug(ex, "VideoSurface {PlayerId}: JS runtime unavailable during dispose", _resolvedPlayerId);
         }
+        catch (TaskCanceledException ex)
+        {
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: task canceled during dispose", _resolvedPlayerId);
+        }
 
         try
         {
@@ -141,6 +145,10 @@ else
         catch (InvalidOperationException ex)
         {
             Logger.LogDebug(ex, "VideoSurface {PlayerId}: JS runtime unavailable during JS cleanup", _resolvedPlayerId);
+        }
+        catch (TaskCanceledException ex)
+        {
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: task canceled during JS cleanup", _resolvedPlayerId);
         }
     }
 }
