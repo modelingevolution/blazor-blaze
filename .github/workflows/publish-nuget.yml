@@ -42,12 +42,15 @@ jobs:
         dotnet pack src/BlazorBlaze.Server/BlazorBlaze.Server.csproj -c Release --no-build -o ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
 
     - name: Push to NuGet.org
-      run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      run: |
+        for pkg in ./nupkgs/*.nupkg; do
+          echo "Pushing $pkg..."
+          dotnet nuget push "$pkg" --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate || echo "WARNING: Failed to push $pkg"
+        done
 
     - name: Publish to ModelingEvolution NuGet
       run: |
-        dotnet nuget push "./nupkgs/*.nupkg" \
-          --api-key ${{ secrets.NUGET_API_KEY_ME }} \
-          --source https://nuget.modelingevolution.com/v3/index.json \
-          --skip-duplicate
-      continue-on-error: true
+        for pkg in ./nupkgs/*.nupkg; do
+          echo "Pushing $pkg..."
+          dotnet nuget push "$pkg" --api-key ${{ secrets.NUGET_API_KEY_ME }} --source https://nuget.modelingevolution.com/v3/index.json --skip-duplicate || echo "WARNING: Failed to push $pkg"
+        done
