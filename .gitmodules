@@ -1,3 +1,4 @@
 [submodule "extern/SkiaSharp"]
 	path = extern/SkiaSharp
 	url = https://github.com/modelingevolution/SkiaSharp.git
+	ignore = dirty
