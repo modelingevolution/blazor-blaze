@@ -37,12 +37,9 @@ export class SizeWatcher {
         const instance = watcherElement.SizeWatcher;
         if (!instance || !instance.callback)
             return;
-        if (typeof instance.callback === 'function') {
-            instance.callback(element.clientWidth, element.clientHeight);
-        }
-        else {
-            instance.callback.invokeMethodAsync('Invoke', element.clientWidth, element.clientHeight);
-        }
+        // Always use invokeMethodAsync — synchronous calls fail with WasmEnableThreads.
+        // The 'function' branch was for legacy [JSImport] paths which are removed.
+        instance.callback.invokeMethodAsync('Invoke', element.clientWidth, element.clientHeight);
     }
 }
 //# sourceMappingURL=SizeWatcher.js.map

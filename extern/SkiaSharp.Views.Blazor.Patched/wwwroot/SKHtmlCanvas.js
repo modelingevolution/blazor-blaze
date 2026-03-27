@@ -102,12 +102,8 @@ export class SKHtmlCanvas {
                 const GL = SKHtmlCanvas.getGL();
                 GL.makeContextCurrent(this.glInfo.context);
             }
-            if (typeof this.renderFrameCallback === 'function') {
-                await this.renderFrameCallback();
-            }
-            else {
-                this.renderFrameCallback.invokeMethodAsync('Invoke');
-            }
+            // Always use invokeMethodAsync — synchronous calls fail with WasmEnableThreads
+            await this.renderFrameCallback.invokeMethodAsync('Invoke');
             this.renderLoopRequest = 0;
             // we may want to draw the next frame
             if (this.renderLoopEnabled)

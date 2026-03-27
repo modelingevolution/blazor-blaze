@@ -21,12 +21,8 @@ export class DpiWatcher {
         const lastDpi = DpiWatcher.lastDpi;
         DpiWatcher.lastDpi = currentDpi;
         if (Math.abs(lastDpi - currentDpi) > 0.001) {
-            if (typeof DpiWatcher.callback === 'function') {
-                DpiWatcher.callback(lastDpi, currentDpi);
-            }
-            else {
-                DpiWatcher.callback.invokeMethodAsync('Invoke', lastDpi, currentDpi);
-            }
+            // Always use invokeMethodAsync — synchronous calls fail with WasmEnableThreads
+            DpiWatcher.callback.invokeMethodAsync('Invoke', lastDpi, currentDpi);
         }
     }
 }
