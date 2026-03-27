@@ -50,3 +50,4 @@ server.log
 *.mp4
 **/videos/
 /samples/SampleApp/publish-debug
+samples/SampleApp/stress-metrics.csv
