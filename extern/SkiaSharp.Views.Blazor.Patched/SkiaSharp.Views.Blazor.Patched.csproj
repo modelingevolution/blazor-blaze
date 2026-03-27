@@ -34,7 +34,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="$(SkiaViewsBlazorRoot)Internal\*.cs" Link="Internal\%(Filename)%(Extension)" />
+    <!-- Internal helpers from submodule, EXCLUDING files we override locally for MT fix -->
+    <Compile Include="$(SkiaViewsBlazorRoot)Internal\*.cs"
+             Exclude="$(SkiaViewsBlazorRoot)Internal\ActionHelper.cs;$(SkiaViewsBlazorRoot)Internal\FloatFloatActionHelper.cs"
+             Link="Internal\%(Filename)%(Extension)" />
+    <!-- Local overrides: async Invoke() for WasmEnableThreads compatibility.
+         These are auto-included by the SDK, so we just exclude the submodule versions above. -->
     <Compile Include="$(SkiaViewsBlazorRoot)SKCanvasView.razor.cs" Link="SKCanvasView.razor.cs" />
     <Compile Include="$(SkiaViewsBlazorRoot)SKGLView.razor.cs" Link="SKGLView.razor.cs" />
     <Compile Include="$(SkiaViewsSharedRoot)SKPaintSurfaceEventArgs.cs" Link="SKPaintSurfaceEventArgs.cs" />
