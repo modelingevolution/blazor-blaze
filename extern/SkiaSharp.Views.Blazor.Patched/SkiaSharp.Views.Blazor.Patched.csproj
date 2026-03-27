@@ -8,10 +8,13 @@
     <Title>ModelingEvolution SkiaSharp Views for Blazor</Title>
     <Description>Patched SkiaSharp.Views.Blazor with async JS interop for .NET 10 WasmEnableThreads support. Drop-in replacement for SkiaSharp.Views.Blazor — same namespace, same types.</Description>
     <PackageTags>Blazor;SkiaSharp;Canvas;WebAssembly;WASM;Threading</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <DefineConstants>$(DefineConstants);__BLAZOR__</DefineConstants>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Must match the path hardcoded in SKHtmlCanvasInterop.cs, DpiWatcherInterop.cs, SizeWatcherInterop.cs -->
+    <StaticWebAssetBasePath>_content/SkiaSharp.Views.Blazor</StaticWebAssetBasePath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -42,6 +45,11 @@
     <Content Include="$(SkiaViewsBlazorRoot)SKCanvasView.razor" Link="SKCanvasView.razor" />
     <Content Include="$(SkiaViewsBlazorRoot)SKGLView.razor" Link="SKGLView.razor" />
     <Content Include="$(SkiaViewsBlazorRoot)_Imports.razor" Link="_Imports.razor" />
+  </ItemGroup>
+
+  <!-- README for NuGet package -->
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <!-- Emscripten linker support: provides InterceptBrowserObjects symbol for AOT/Release builds -->
