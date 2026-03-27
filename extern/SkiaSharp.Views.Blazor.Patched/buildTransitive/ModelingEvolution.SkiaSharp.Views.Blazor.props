@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <Project>
 
-  <!-- Workaround for https://github.com/dotnet/runtime/issues/76077 -->
   <!-- Provides InterceptBrowserObjects symbol required by SkiaSharp native WASM binary at Emscripten link time -->
+  <!-- Uses EmccExtraJSLibrary (.NET 10+) with EmccExtraLDFlags fallback for older SDKs -->
+  <ItemGroup>
+    <EmccExtraJSLibrary Include="$(MSBuildThisFileDirectory)SkiaSharpInterop.js" />
+  </ItemGroup>
   <PropertyGroup>
     <EmccExtraLDFlags>$(EmccExtraLDFlags) --js-library="$(MSBuildThisFileDirectory)SkiaSharpInterop.js"</EmccExtraLDFlags>
   </PropertyGroup>

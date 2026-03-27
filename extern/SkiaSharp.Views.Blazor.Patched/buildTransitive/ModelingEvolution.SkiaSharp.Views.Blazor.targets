@@ -1,0 +1,7 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Register SkiaSharpInterop.js as an Emscripten JS library for AOT/Release builds.
+       Provides InterceptBrowserObjects symbol needed by the P/Invoke linker. -->
+  <PropertyGroup Condition="('$(UsingMicrosoftNETSdkBlazorWebAssembly)' == 'true' or '$(UsingMicrosoftNETSdkWebAssembly)' == 'true')">
+    <EmccExtraLDFlags>$(EmccExtraLDFlags) --js-library "$(MSBuildThisFileDirectory)SkiaSharpInterop.js"</EmccExtraLDFlags>
+  </PropertyGroup>
+</Project>

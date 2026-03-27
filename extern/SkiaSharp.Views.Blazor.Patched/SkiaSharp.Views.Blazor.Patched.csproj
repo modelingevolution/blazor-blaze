@@ -55,6 +55,7 @@
   <!-- Emscripten linker support: provides InterceptBrowserObjects symbol for AOT/Release builds -->
   <ItemGroup>
     <None Include="buildTransitive\ModelingEvolution.SkiaSharp.Views.Blazor.props" Pack="true" PackagePath="buildTransitive\" />
+    <None Include="buildTransitive\ModelingEvolution.SkiaSharp.Views.Blazor.targets" Pack="true" PackagePath="buildTransitive\" />
     <None Include="buildTransitive\SkiaSharpInterop.js" Pack="true" PackagePath="buildTransitive\" />
   </ItemGroup>
 
