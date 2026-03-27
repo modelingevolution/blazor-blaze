@@ -49,3 +49,4 @@ server.log
 # Test videos (generated locally)
 *.mp4
 **/videos/
+/samples/SampleApp/publish-debug

@@ -1,0 +1,426 @@
+@page "/curve-correction"
+@rendermode InteractiveWebAssembly
+@using BlazorBlaze
+@using ModelingEvolution.Drawing
+@using SkiaSharp
+@implements IDisposable
+
+<PageTitle>Curve Correction Demo</PageTitle>
+
+<h1>Curve Correction Demo</h1>
+
+<div style="display: flex; gap: 24px; flex-wrap: wrap;">
+    <div style="width: 800px; height: 500px; border: 1px solid #ccc;">
+        <BlazorCanvas Engine="_engine" Size="@_canvasSize" />
+    </div>
+
+    <div style="min-width: 340px; max-width: 400px;">
+        <h4>Parameters</h4>
+
+        <div class="mb-2">
+            <label>Noise magnitude</label>
+            <div class="d-flex align-items-center gap-2">
+                <input type="range" min="0" max="5" step="0.1" @bind="_noiseMag" @bind:event="oninput" @bind:after="Recompute" class="form-range flex-grow-1" />
+                <input type="number" min="0" max="5" step="0.1" @bind="_noiseMag" @bind:event="onchange" @bind:after="Recompute" style="width:70px" class="form-control form-control-sm" />
+            </div>
+        </div>
+
+        <div class="mb-2">
+            <label>Rotation (&deg;)</label>
+            <div class="d-flex align-items-center gap-2">
+                <input type="range" min="-180" max="180" step="1" @bind="_angleDeg" @bind:event="oninput" @bind:after="Recompute" class="form-range flex-grow-1" />
+                <input type="number" min="-180" max="180" step="1" @bind="_angleDeg" @bind:event="onchange" @bind:after="Recompute" style="width:70px" class="form-control form-control-sm" />
+            </div>
+        </div>
+
+        <div class="mb-2">
+            <label>Translation X</label>
+            <div class="d-flex align-items-center gap-2">
+                <input type="range" min="-50" max="50" step="1" @bind="_tx" @bind:event="oninput" @bind:after="Recompute" class="form-range flex-grow-1" />
+                <input type="number" min="-50" max="50" step="1" @bind="_tx" @bind:event="onchange" @bind:after="Recompute" style="width:70px" class="form-control form-control-sm" />
+            </div>
+        </div>
+
+        <div class="mb-2">
+            <label>Translation Y</label>
+            <div class="d-flex align-items-center gap-2">
+                <input type="range" min="-50" max="50" step="1" @bind="_ty" @bind:event="oninput" @bind:after="Recompute" class="form-range flex-grow-1" />
+                <input type="number" min="-50" max="50" step="1" @bind="_ty" @bind:event="onchange" @bind:after="Recompute" style="width:70px" class="form-control form-control-sm" />
+            </div>
+        </div>
+
+        <div class="mb-2">
+            <label>Dropout (%)</label>
+            <div class="d-flex align-items-center gap-2">
+                <input type="range" min="0" max="30" step="1" @bind="_dropoutPct" @bind:event="oninput" @bind:after="Recompute" class="form-range flex-grow-1" />
+                <input type="number" min="0" max="30" step="1" @bind="_dropoutPct" @bind:event="onchange" @bind:after="Recompute" style="width:70px" class="form-control form-control-sm" />
+            </div>
+        </div>
+
+        <div class="mb-2">
+            <label>Random seed</label>
+            <div class="d-flex align-items-center gap-2">
+                <input type="range" min="1" max="200" step="1" @bind="_seed" @bind:event="oninput" @bind:after="Recompute" class="form-range flex-grow-1" />
+                <input type="number" min="1" max="200" step="1" @bind="_seed" @bind:event="onchange" @bind:after="Recompute" style="width:70px" class="form-control form-control-sm" />
+            </div>
+        </div>
+
+        <div class="mb-2">
+            <label>Densify unit</label>
+            <div class="d-flex align-items-center gap-2">
+                <input type="range" min="0.1" max="5" step="0.1" @bind="_densifyUnit" @bind:event="oninput" @bind:after="Recompute" class="form-range flex-grow-1" />
+                <input type="number" min="0.1" max="5" step="0.1" @bind="_densifyUnit" @bind:event="onchange" @bind:after="Recompute" style="width:70px" class="form-control form-control-sm" />
+            </div>
+        </div>
+
+        <div class="mb-2">
+            <label>Smoothness (0 = off)</label>
+            <div class="d-flex align-items-center gap-2">
+                <input type="range" min="0" max="20" step="1" @bind="_smoothness" @bind:event="oninput" @bind:after="Recompute" class="form-range flex-grow-1" />
+                <input type="number" min="0" max="20" step="1" @bind="_smoothness" @bind:event="onchange" @bind:after="Recompute" style="width:70px" class="form-control form-control-sm" />
+            </div>
+        </div>
+
+        <hr />
+
+        <h4>Results</h4>
+        @if (_result != null)
+        {
+            var recoveredDeg = (double)(Degree<double>)_result.Value.Alignment.Angle;
+            var angleDiff = Math.Abs(recoveredDeg - _angleDeg) % 180.0;
+            if (angleDiff > 90.0) angleDiff = 180.0 - angleDiff;
+            <table class="table table-sm">
+                <tr><td>Recovered angle</td><td><strong>@recoveredDeg.ToString("F2")&deg;</strong> (diff: @angleDiff.ToString("F2")&deg;)</td></tr>
+                <tr><td>Translation</td><td><strong>(@_result.Value.Alignment.Translation.X.ToString("F2"), @_result.Value.Alignment.Translation.Y.ToString("F2"))</strong></td></tr>
+                <tr><td>Correction accuracy</td><td><strong>@_correctionAccuracy.ToString("F3")</strong></td></tr>
+                <tr><td>Total residual</td><td><strong>@_result.Value.TotalResidualError.ToString("F3")</strong></td></tr>
+                <tr><td>Segments</td><td><strong>@_result.Value.CorrectedCurve.SegmentCount</strong></td></tr>
+                <tr><td>Measured points</td><td><strong>@_measuredPointCount</strong></td></tr>
+            </table>
+        }
+        else
+        {
+            <p class="text-muted">Computing...</p>
+        }
+
+        <hr />
+        <h5>Legend</h5>
+        <div><span style="color: #4488ff;">&#9644;</span> Template (dashed)</div>
+        <div><span style="color: #888888;">&#9644;</span> Measured (noisy target)</div>
+        <div><span style="color: #ff4444;">&#9644;</span> Corrected (fitted result)</div>
+    </div>
+</div>
+
+@code {
+    private static readonly System.Drawing.Size _canvasSize = new(800, 500);
+
+    // Parameters
+    private double _noiseMag = 1.0;
+    private double _angleDeg = 12;
+    private double _tx = 15;
+    private double _ty = -10;
+    private int _dropoutPct = 10;
+    private int _seed = 77;
+    private double _densifyUnit = 1.0;
+    private int _smoothness = 0;
+
+    // State
+    private BlazeEngine _engine = null!;
+    private CurveCorrectionControl _curveControl = null!;
+    private ComplexCurve<double> _template;
+    private CorrectionResult<double>? _result;
+    private int _measuredPointCount;
+    private double _correctionAccuracy;
+
+    protected override void OnInitialized()
+    {
+        _engine = new BlazeEngine(_canvasSize);
+        _template = BuildRoundedRectangle(100, 70, 10);
+
+        _curveControl = new CurveCorrectionControl();
+        _curveControl.Offset = new SKPoint(100, 50);
+        _engine.Scene.AddControl(_curveControl);
+
+        Recompute();
+    }
+
+    private void Recompute()
+    {
+        double dropout = _dropoutPct / 100.0;
+        var noise = GenerateNoise(2000, _noiseMag, dropout, new Random(_seed));
+        var measured = DensifyAndPerturb(_template, noise, _tx, _ty, _angleDeg, _densifyUnit);
+
+        // Apply smoothing if enabled
+        if (_smoothness > 0)
+            measured = SmoothPolyline(measured, _smoothness);
+
+        _measuredPointCount = measured.Count;
+        var result = _template.ComputeCorrections(measured);
+        _result = result;
+
+        // Inverse-transform corrected curve back to template space for overlay
+        var correctedInTemplate = result.CorrectedCurve
+            - result.Alignment.Translation
+            - result.Alignment.Angle;
+
+        // Correction accuracy: max Hausdorff-like distance between corrected (in template space) and template
+        _correctionAccuracy = MaxShapeDeviation(correctedInTemplate, _template);
+
+        _curveControl.SetData(_template, measured, result.CorrectedCurve, correctedInTemplate, result.Alignment);
+        StateHasChanged();
+    }
+
+    private static Polyline<double> SmoothPolyline(Polyline<double> polyline, int windowRadius)
+    {
+        var span = polyline.AsSpan();
+        if (span.Length < 3) return polyline;
+
+        var smoothed = new Point<double>[span.Length];
+        smoothed[0] = span[0];
+        smoothed[span.Length - 1] = span[span.Length - 1];
+
+        for (int i = 1; i < span.Length - 1; i++)
+        {
+            int lo = Math.Max(0, i - windowRadius);
+            int hi = Math.Min(span.Length - 1, i + windowRadius);
+            double sx = 0, sy = 0;
+            int count = 0;
+            for (int j = lo; j <= hi; j++)
+            {
+                sx += span[j].X;
+                sy += span[j].Y;
+                count++;
+            }
+            smoothed[i] = new Point<double>(sx / count, sy / count);
+        }
+
+        return new Polyline<double>(smoothed);
+    }
+
+    private static double MaxShapeDeviation(ComplexCurve<double> a, ComplexCurve<double> b)
+    {
+        var denseA = a.Densify().AsSpan();
+        var denseB = b.Densify().AsSpan();
+        double maxDist = 0;
+
+        for (int i = 0; i < denseA.Length; i++)
+        {
+            double bestDist = double.MaxValue;
+            for (int j = 0; j < denseB.Length; j++)
+            {
+                var dx = denseA[i].X - denseB[j].X;
+                var dy = denseA[i].Y - denseB[j].Y;
+                var d = dx * dx + dy * dy;
+                if (d < bestDist) bestDist = d;
+            }
+            var dist = Math.Sqrt(bestDist);
+            if (dist > maxDist) maxDist = dist;
+        }
+        return maxDist;
+    }
+
+    // ════════════════════════════════════════════════
+    //  Template builder (from CorrectionTests)
+    // ════════════════════════════════════════════════
+
+    private static ComplexCurve<double> BuildRoundedRectangle(double w, double h, double r)
+    {
+        const double k = 0.5522847498;
+        var kr = k * r;
+        var builder = new ComplexCurveBuilder<double>();
+
+        builder.AddPoints(new Point<double>[] { new(r, 0), new(w - r, 0) });
+        builder.AddBezier(new BezierCurve<double>(
+            new(w - r, 0), new(w - r + kr, 0), new(w, r - kr), new(w, r)));
+        builder.AddPoints(new Point<double>[] { new(w, r), new(w, h - r) });
+        builder.AddBezier(new BezierCurve<double>(
+            new(w, h - r), new(w, h - r + kr), new(w - r + kr, h), new(w - r, h)));
+        builder.AddPoints(new Point<double>[] { new(w - r, h), new(r, h) });
+        builder.AddBezier(new BezierCurve<double>(
+            new(r, h), new(r - kr, h), new(0, h - r + kr), new(0, h - r)));
+        builder.AddPoints(new Point<double>[] { new(0, h - r), new(0, r) });
+        builder.AddBezier(new BezierCurve<double>(
+            new(0, r), new(0, r - kr), new(r - kr, 0), new(r, 0)));
+
+        return builder.Build();
+    }
+
+    // ════════════════════════════════════════════════
+    //  Noise & perturbation (from CorrectionTests)
+    // ════════════════════════════════════════════════
+
+    private record struct NoiseEntry(double Offset, bool Drop);
+
+    private static NoiseEntry[] GenerateNoise(int count, double noiseMag, double dropoutFraction, Random rng)
+    {
+        var entries = new NoiseEntry[count];
+        for (int i = 0; i < count; i++)
+            entries[i] = new NoiseEntry(
+                (rng.NextDouble() * 2 - 1) * noiseMag,
+                rng.NextDouble() < dropoutFraction);
+        return entries;
+    }
+
+    private static Polyline<double> DensifyAndPerturb(
+        ComplexCurve<double> curve, NoiseEntry[] noise,
+        double tx, double ty, double angleDeg, double densifyUnit)
+    {
+        var polyline = curve.Densify(densifyUnit);
+        var span = polyline.AsSpan();
+        var pts = new List<Point<double>>(span.Length);
+
+        for (int i = 0; i < span.Length; i++)
+        {
+            var entry = noise[i % noise.Length];
+
+            if (i > 0 && i < span.Length - 1 && entry.Drop)
+                continue;
+
+            double dx, dy;
+            if (i == 0)
+            { dx = span[1].X - span[0].X; dy = span[1].Y - span[0].Y; }
+            else if (i == span.Length - 1)
+            { dx = span[i].X - span[i - 1].X; dy = span[i].Y - span[i - 1].Y; }
+            else
+            { dx = span[i + 1].X - span[i - 1].X; dy = span[i + 1].Y - span[i - 1].Y; }
+
+            var len = Math.Sqrt(dx * dx + dy * dy);
+            if (len > 1e-6)
+            {
+                var ndx = -dy / len;
+                var ndy = dx / len;
+                pts.Add(new Point<double>(span[i].X + entry.Offset * ndx, span[i].Y + entry.Offset * ndy));
+            }
+            else
+            {
+                pts.Add(new Point<double>(span[i].X + entry.Offset, span[i].Y));
+            }
+        }
+
+        var angleRad = angleDeg * Math.PI / 180.0;
+        var cos = Math.Cos(angleRad);
+        var sin = Math.Sin(angleRad);
+        for (int i = 0; i < pts.Count; i++)
+        {
+            var p = pts[i];
+            var rx = p.X * cos - p.Y * sin + tx;
+            var ry = p.X * sin + p.Y * cos + ty;
+            pts[i] = new Point<double>(rx, ry);
+        }
+
+        return new Polyline<double>(pts.ToArray());
+    }
+
+    public void Dispose()
+    {
+    }
+
+    // ════════════════════════════════════════════════
+    //  Custom control for rendering curves
+    // ════════════════════════════════════════════════
+
+    private class CurveCorrectionControl : Control
+    {
+        private ComplexCurve<double> _template;
+        private Polyline<double> _measured;
+        private ComplexCurve<double> _corrected;
+        private ComplexCurve<double> _correctedInTemplate;
+        private AlignmentResult<double> _alignment;
+        private bool _hasData;
+
+        // Scale factor for visibility (100x70 template is small)
+        private const float Scale = 3f;
+
+        public void SetData(
+            ComplexCurve<double> template,
+            Polyline<double> measured,
+            ComplexCurve<double> corrected,
+            ComplexCurve<double> correctedInTemplate,
+            AlignmentResult<double> alignment)
+        {
+            _template = template;
+            _measured = measured;
+            _corrected = corrected;
+            _correctedInTemplate = correctedInTemplate;
+            _alignment = alignment;
+            _hasData = true;
+        }
+
+        public override void Render(SKCanvas canvas, SKRect viewport)
+        {
+            if (!_hasData) return;
+
+            canvas.Save();
+            canvas.Scale(Scale, Scale);
+
+            // 1. Template (blue dashed)
+            using (var paint = new SKPaint
+            {
+                Style = SKPaintStyle.Stroke,
+                Color = new SKColor(68, 136, 255),
+                StrokeWidth = 1.5f / Scale,
+                PathEffect = SKPathEffect.CreateDash(new float[] { 6f / Scale, 4f / Scale }, 0),
+                IsAntialias = true
+            })
+            {
+                canvas.DrawComplexCurve(_template, paint);
+            }
+
+            // 2. Corrected in template space (red solid)
+            using (var paint = new SKPaint
+            {
+                Style = SKPaintStyle.Stroke,
+                Color = new SKColor(255, 68, 68),
+                StrokeWidth = 1.5f / Scale,
+                IsAntialias = true
+            })
+            {
+                canvas.DrawComplexCurve(_correctedInTemplate, paint);
+            }
+
+            canvas.Restore();
+
+            // 3. Measured polyline in world space (gray, offset for visibility)
+            canvas.Save();
+            canvas.Translate(420, 20);
+            canvas.Scale(Scale * 0.8f, Scale * 0.8f);
+
+            using (var paint = new SKPaint
+            {
+                Style = SKPaintStyle.Stroke,
+                Color = new SKColor(136, 136, 136),
+                StrokeWidth = 1f,
+                IsAntialias = true
+            })
+            {
+                canvas.DrawPolyline(_measured, paint);
+            }
+
+            // 4. Corrected in world space (red, overlaid on measured)
+            using (var paint = new SKPaint
+            {
+                Style = SKPaintStyle.Stroke,
+                Color = new SKColor(255, 68, 68),
+                StrokeWidth = 0.6f,
+                IsAntialias = true
+            })
+            {
+                canvas.DrawComplexCurve(_corrected, paint);
+            }
+
+            canvas.Restore();
+
+            // Labels
+            using var labelPaint = new SKPaint
+            {
+                Color = SKColors.White,
+                TextSize = 14,
+                IsAntialias = true
+            };
+            canvas.DrawText("Template space", 10, 15, labelPaint);
+            canvas.DrawText("World space", 420, 15, labelPaint);
+        }
+
+        public override void RenderForHitMap(SKCanvas canvas, SKPaint paint) { }
+    }
+}

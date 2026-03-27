@@ -33,6 +33,13 @@ public static class SkiaExtensions
     public static Point<float> AsPoint(this SKPoint p) => new Point<float>(p.X, p.Y);
     public static Point<double> AsPointD(this SKPoint p) => new Point<double>(p.X, p.Y);
 
+    public static SKPoint Sk(this Vector<float> v) => new SKPoint(v.X, v.Y);
+    public static SKPoint Sk(this Vector<double> v) => new SKPoint((float)v.X, (float)v.Y);
+    public static SKSize Sk(this Size<float> s) => new SKSize(s.Width, s.Height);
+    public static SKSize Sk(this Size<double> s) => new SKSize((float)s.Width, (float)s.Height);
+    public static SKRect Sk(this Rectangle<float> r) => new SKRect(r.X, r.Y, r.X + r.Width, r.Y + r.Height);
+    public static SKRect Sk(this Rectangle<double> r) => new SKRect((float)r.X, (float)r.Y, (float)(r.X + r.Width), (float)(r.Y + r.Height));
+
     public static void LogPoints(this IEnumerable<Point<float>> points)
     {
         Console.WriteLine(string.Join(' ', points.Select(x=>$"[{x.X} {x.Y}]")));

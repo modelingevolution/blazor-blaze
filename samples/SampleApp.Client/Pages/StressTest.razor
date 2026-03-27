@@ -5,8 +5,10 @@
 @using Microsoft.Extensions.Logging
 @using SkiaSharp
 @using SkiaSharp.Views.Blazor
+@using System.Net.Http.Json
 @inject ILoggerFactory LoggerFactory
 @inject NavigationManager NavigationManager
+@inject HttpClient Http
 @implements IAsyncDisposable
 
 <PageTitle>20K Points Stress Test</PageTitle>
@@ -46,6 +48,14 @@
     <span>Pool Total Created: <strong data-testid="pool-total">@(_stream?.PoolTotalCreated ?? 0)</strong></span>
 </div>
 
+<div class="stats mb-3 p-2 bg-warning text-dark rounded" data-testid="gc-stats">
+    <span class="me-3">Gen0: <strong data-testid="gc-gen0">@_gen0Collections</strong></span>
+    <span class="me-3">Gen1: <strong data-testid="gc-gen1">@_gen1Collections</strong></span>
+    <span class="me-3">Gen2: <strong data-testid="gc-gen2">@_gen2Collections</strong></span>
+    <span class="me-3">GC Pause: <strong data-testid="gc-pause">@_gcPauseDeltaMs.ToString("F2") ms</strong></span>
+    <span>Heap: <strong data-testid="gc-memory">@(((double)_gcTotalMemory / (1024 * 1024)).ToString("F1")) MB</strong></span>
+</div>
+
 @if (!string.IsNullOrEmpty(_stream?.Error))
 {
     <div class="alert alert-danger" data-testid="error-message">
@@ -81,6 +91,18 @@
     private double _lastRenderTimeMs;
     private List<float> _fpsHistory = new();
 
+    // GC tracking
+    private int _gen0Collections;
+    private int _gen1Collections;
+    private int _gen2Collections;
+    private TimeSpan _lastGcPause;
+    private double _gcPauseDeltaMs;
+    private long _gcTotalMemory;
+
+    // Metrics reporting
+    private PeriodicTimer? _metricsTimer;
+    private CancellationTokenSource? _metricsCts;
+
     protected override void OnInitialized()
     {
         // Create the rendering stream with V2 protocol decoder
@@ -104,6 +126,11 @@
             var wsUri = new Uri($"{wsScheme}://{baseUri.Host}:{baseUri.Port}/ws/stress20k");
 
             await _stream.ConnectAsync(wsUri);
+
+            // Start metrics reporting every 10 seconds
+            _metricsCts = new CancellationTokenSource();
+            _metricsTimer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+            _ = ReportMetricsLoop(_metricsCts.Token);
         }
         catch (Exception ex)
         {
@@ -117,6 +144,8 @@
     private async Task StopStreaming()
     {
         _isStreaming = false;
+        _metricsCts?.Cancel();
+        _metricsTimer?.Dispose();
 
         if (_stream != null)
         {
@@ -174,6 +203,15 @@
         _renderStopwatch.Stop();
         _lastRenderTimeMs = _renderStopwatch.Elapsed.TotalMilliseconds;
 
+        // Track GC stats
+        _gen0Collections = GC.CollectionCount(0);
+        _gen1Collections = GC.CollectionCount(1);
+        _gen2Collections = GC.CollectionCount(2);
+        _gcTotalMemory = GC.GetTotalMemory(false);
+        var currentPause = GC.GetTotalPauseDuration();
+        _gcPauseDeltaMs = (currentPause - _lastGcPause).TotalMilliseconds;
+        _lastGcPause = currentPause;
+
         // Update stats display
         if (_stream.Frame % 10 == 0)
         {
@@ -181,8 +219,38 @@
         }
     }
 
+    private async Task ReportMetricsLoop(CancellationToken ct)
+    {
+        while (await _metricsTimer!.WaitForNextTickAsync(ct))
+        {
+            if (_fpsHistory.Count == 0) continue;
+
+            var sample = new
+            {
+                AvgFps = (float)_fpsHistory.Average(),
+                Gen0 = _gen0Collections,
+                Gen1 = _gen1Collections,
+                Gen2 = _gen2Collections,
+                GcPauseMs = _gcPauseDeltaMs,
+                HeapMb = (double)_gcTotalMemory / (1024 * 1024)
+            };
+
+            try
+            {
+                await Http.PostAsJsonAsync("/api/stress-metrics", sample, ct);
+            }
+            catch
+            {
+                // Ignore reporting failures
+            }
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
+        _metricsCts?.Cancel();
+        _metricsTimer?.Dispose();
+
         if (_stream != null)
         {
             await _stream.DisposeAsync();

@@ -19,12 +19,13 @@ dotnet publish -c Release -o ./publish
 # Run the published app in background
 echo "Starting server in background..."
 URL="http://localhost:5100"
-nohup dotnet ./publish/SampleApp.dll --urls "$URL" > server.log 2>&1 &
+cd publish
+nohup dotnet ./SampleApp.dll --urls "$URL" > ../server.log 2>&1 &
 SERVER_PID=$!
 
 # Wait for server to be ready (max 30 seconds)
 for i in {1..30}; do
-    if grep -q "Now listening on:" server.log 2>/dev/null; then
+    if grep -q "Now listening on:" ../server.log 2>/dev/null; then
         echo "Server running at $URL (PID: $SERVER_PID)"
         echo "Log: $(pwd)/server.log"
         exit 0

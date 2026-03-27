@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>ModelingEvolution.SkiaSharp.Views.Blazor</PackageId>
+    <RootNamespace>SkiaSharp.Views.Blazor</RootNamespace>
+    <AssemblyName>SkiaSharp.Views.Blazor</AssemblyName>
+    <Title>ModelingEvolution SkiaSharp Views for Blazor</Title>
+    <Description>Patched SkiaSharp.Views.Blazor with async JS interop for .NET 10 WasmEnableThreads support. Drop-in replacement for SkiaSharp.Views.Blazor — same namespace, same types.</Description>
+    <PackageTags>Blazor;SkiaSharp;Canvas;WebAssembly;WASM;Threading</PackageTags>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <DefineConstants>$(DefineConstants);__BLAZOR__</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.WebAssembly" />
+  </ItemGroup>
+
+  <!-- Source files from SkiaSharp submodule -->
+  <PropertyGroup>
+    <SkiaViewsBlazorRoot>..\SkiaSharp\source\SkiaSharp.Views\SkiaSharp.Views.Blazor\</SkiaViewsBlazorRoot>
+    <SkiaViewsSharedRoot>..\SkiaSharp\source\SkiaSharp.Views\SkiaSharp.Views.Shared\</SkiaViewsSharedRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(SkiaViewsBlazorRoot)Internal\*.cs" Link="Internal\%(Filename)%(Extension)" />
+    <Compile Include="$(SkiaViewsBlazorRoot)SKCanvasView.razor.cs" Link="SKCanvasView.razor.cs" />
+    <Compile Include="$(SkiaViewsBlazorRoot)SKGLView.razor.cs" Link="SKGLView.razor.cs" />
+    <Compile Include="$(SkiaViewsSharedRoot)SKPaintSurfaceEventArgs.cs" Link="SKPaintSurfaceEventArgs.cs" />
+    <Compile Include="$(SkiaViewsSharedRoot)SKPaintGLSurfaceEventArgs.cs" Link="SKPaintGLSurfaceEventArgs.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="$(SkiaViewsBlazorRoot)SKCanvasView.razor" Link="SKCanvasView.razor" />
+    <Content Include="$(SkiaViewsBlazorRoot)SKGLView.razor" Link="SKGLView.razor" />
+    <Content Include="$(SkiaViewsBlazorRoot)_Imports.razor" Link="_Imports.razor" />
+  </ItemGroup>
+
+</Project>

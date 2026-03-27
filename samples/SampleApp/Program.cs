@@ -8,6 +8,7 @@ using SkiaSharp;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri("http://localhost:5100") });
 builder.Services.AddRazorComponents()
     .AddInteractiveWebAssemblyComponents();
 
@@ -25,6 +26,14 @@ else
 }
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+
+app.Use(async (context, next) =>
+{
+    // COOP/COEP required for SharedArrayBuffer (WASM threading)
+    context.Response.Headers["Cross-Origin-Opener-Policy"] = "same-origin";
+    context.Response.Headers["Cross-Origin-Embedder-Policy"] = "credentialless";
+    await next();
+});
 
 app.UseWebSockets();
 
@@ -51,6 +60,18 @@ app.MapVectorGraphicsEndpoint("/ws/mjpeg-ball", async (IRemoteCanvasV2 canvas, C
 var videosPath = Path.Combine(app.Environment.WebRootPath, "videos");
 app.MapMjpegEndpoint("/mjpeg/{filename}", videosPath);
 app.MapMjpegFrameEndpoint("/mjpeg-frame/{filename}/{frame:int}", videosPath);
+
+// Stress test metrics endpoint - appends avg FPS samples to file
+var metricsFile = Path.Combine(app.Environment.ContentRootPath, "stress-metrics.csv");
+if (!File.Exists(metricsFile))
+    await File.WriteAllTextAsync(metricsFile, "timestamp,avg_fps,gc_gen0,gc_gen1,gc_gen2,gc_pause_ms,heap_mb\n");
+
+app.MapPost("/api/stress-metrics", async (StressMetricsSample sample) =>
+{
+    var line = $"{DateTime.UtcNow:O},{sample.AvgFps:F1},{sample.Gen0},{sample.Gen1},{sample.Gen2},{sample.GcPauseMs:F2},{sample.HeapMb:F1}\n";
+    await File.AppendAllTextAsync(metricsFile, line);
+    return Results.Ok();
+});
 
 app.UseAntiforgery();
 
@@ -282,4 +303,6 @@ static async Task StreamMjpegWithBallAsync(IRemoteCanvasV2 canvas, string mjpegP
             break;
     }
 }
+
+record StressMetricsSample(float AvgFps, int Gen0, int Gen1, int Gen2, double GcPauseMs, double HeapMb);
 

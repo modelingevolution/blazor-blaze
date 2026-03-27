@@ -24,7 +24,8 @@
 
 
   <ItemGroup>
-    <PackageReference Include="SkiaSharp.Views.Blazor" />
+    <!-- Patched for WasmEnableThreads support (async JS interop callbacks) -->
+    <ProjectReference Include="..\..\extern\SkiaSharp.Views.Blazor.Patched\SkiaSharp.Views.Blazor.Patched.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
     <PackageReference Include="ModelingEvolution.Drawing" />
     <PackageReference Include="ModelingEvolution.Bytes" />

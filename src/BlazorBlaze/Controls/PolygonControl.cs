@@ -19,7 +19,7 @@ public class PolygonControl : ShapeControl
 
     public void RefreshPolygon()
     {
-        _path = ConvertPolygonToSKPath(_polygon);
+        _path = _polygon.ToSKPath();
     }
 
     private SKPath _path;
@@ -27,9 +27,8 @@ public class PolygonControl : ShapeControl
 
     public PolygonControl(Polygon<float> polygon)
     {
-        _path = ConvertPolygonToSKPath(polygon);
+        _path = polygon.ToSKPath();
         _polygon = polygon;
-
     }
 
     
@@ -49,19 +48,6 @@ public class PolygonControl : ShapeControl
             canvas.DrawPath(_path, stroke);
         }
     }
-    private static SKPath ConvertPolygonToSKPath(Polygon<float> polygon)
-    {
-        var path = new SKPath();
-
-        path.MoveTo(polygon[0].X, polygon[0].Y);
-        for (int i = 1; i < polygon.Count; i++)
-            path.LineTo(polygon[i].X, polygon[i].Y);
-
-
-        path.Close();
-        return path;
-    }
-
     public override void RenderForHitMap(SKCanvas canvas, SKPaint paint)
     {
         canvas.DrawPath(_path, paint);
