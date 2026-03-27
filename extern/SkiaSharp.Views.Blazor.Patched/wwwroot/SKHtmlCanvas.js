@@ -102,8 +102,12 @@ export class SKHtmlCanvas {
                 const GL = SKHtmlCanvas.getGL();
                 GL.makeContextCurrent(this.glInfo.context);
             }
-            // Always use invokeMethodAsync — synchronous calls fail with WasmEnableThreads
-            await this.renderFrameCallback.invokeMethodAsync('Invoke');
+            // Handle both DotNetObjectReference (has invokeMethodAsync) and function proxy
+            if (this.renderFrameCallback.invokeMethodAsync) {
+                await this.renderFrameCallback.invokeMethodAsync('Invoke');
+            } else if (typeof this.renderFrameCallback === 'function') {
+                await Promise.resolve(this.renderFrameCallback());
+            }
             this.renderLoopRequest = 0;
             // we may want to draw the next frame
             if (this.renderLoopEnabled)

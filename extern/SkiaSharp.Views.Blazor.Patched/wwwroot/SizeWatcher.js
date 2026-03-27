@@ -37,9 +37,14 @@ export class SizeWatcher {
         const instance = watcherElement.SizeWatcher;
         if (!instance || !instance.callback)
             return;
-        // Always use invokeMethodAsync — synchronous calls fail with WasmEnableThreads.
-        // The 'function' branch was for legacy [JSImport] paths which are removed.
-        instance.callback.invokeMethodAsync('Invoke', element.clientWidth, element.clientHeight);
+        // Handle both callback types:
+        // - DotNetObjectReference: has invokeMethodAsync
+        // - Function proxy: call asynchronously via setTimeout to avoid sync C# call error
+        if (instance.callback.invokeMethodAsync) {
+            instance.callback.invokeMethodAsync('Invoke', element.clientWidth, element.clientHeight);
+        } else if (typeof instance.callback === 'function') {
+            setTimeout(() => instance.callback(element.clientWidth, element.clientHeight), 0);
+        }
     }
 }
 //# sourceMappingURL=SizeWatcher.js.map
