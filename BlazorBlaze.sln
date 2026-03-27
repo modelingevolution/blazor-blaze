@@ -33,6 +33,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "extern", "extern", "{8C8C18
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkiaSharp.Views.Blazor.Patched", "extern\SkiaSharp.Views.Blazor.Patched\SkiaSharp.Views.Blazor.Patched.csproj", "{9056AD1F-37A0-4C21-AD44-8A94A8641235}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlazorBlaze.Server.Tests", "tests\BlazorBlaze.Server.Tests\BlazorBlaze.Server.Tests.csproj", "{EA858FDF-6338-49E3-9891-354DEEE17BDF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -163,6 +165,18 @@ Global
 		{9056AD1F-37A0-4C21-AD44-8A94A8641235}.Release|x64.Build.0 = Release|Any CPU
 		{9056AD1F-37A0-4C21-AD44-8A94A8641235}.Release|x86.ActiveCfg = Release|Any CPU
 		{9056AD1F-37A0-4C21-AD44-8A94A8641235}.Release|x86.Build.0 = Release|Any CPU
+		{EA858FDF-6338-49E3-9891-354DEEE17BDF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA858FDF-6338-49E3-9891-354DEEE17BDF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA858FDF-6338-49E3-9891-354DEEE17BDF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{EA858FDF-6338-49E3-9891-354DEEE17BDF}.Debug|x64.Build.0 = Debug|Any CPU
+		{EA858FDF-6338-49E3-9891-354DEEE17BDF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{EA858FDF-6338-49E3-9891-354DEEE17BDF}.Debug|x86.Build.0 = Debug|Any CPU
+		{EA858FDF-6338-49E3-9891-354DEEE17BDF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA858FDF-6338-49E3-9891-354DEEE17BDF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EA858FDF-6338-49E3-9891-354DEEE17BDF}.Release|x64.ActiveCfg = Release|Any CPU
+		{EA858FDF-6338-49E3-9891-354DEEE17BDF}.Release|x64.Build.0 = Release|Any CPU
+		{EA858FDF-6338-49E3-9891-354DEEE17BDF}.Release|x86.ActiveCfg = Release|Any CPU
+		{EA858FDF-6338-49E3-9891-354DEEE17BDF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -178,5 +192,6 @@ Global
 		{C0F34291-251B-4A5B-87C9-58170EC6E435} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{CEA3F6EB-AF55-4D99-9E80-D223763C46F4} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{9056AD1F-37A0-4C21-AD44-8A94A8641235} = {8C8C186C-83DC-ECBC-707A-D920EEBF6757}
+		{EA858FDF-6338-49E3-9891-354DEEE17BDF} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

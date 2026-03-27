@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <RootNamespace>BlazorBlaze.Server.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
@@ -20,10 +21,11 @@
     </PackageReference>
     <PackageReference Include="bunit" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\BlazorBlaze\BlazorBlaze.csproj" />
+    <ProjectReference Include="..\..\src\BlazorBlaze.Server\BlazorBlaze.Server.csproj" />
   </ItemGroup>
 
   <ItemGroup>
