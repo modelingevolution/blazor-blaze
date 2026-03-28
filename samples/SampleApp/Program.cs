@@ -27,14 +27,6 @@ else
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
-app.Use(async (context, next) =>
-{
-    // COOP/COEP required for SharedArrayBuffer (WASM threading)
-    context.Response.Headers["Cross-Origin-Opener-Policy"] = "same-origin";
-    context.Response.Headers["Cross-Origin-Embedder-Policy"] = "credentialless";
-    await next();
-});
-
 app.UseWebSockets();
 
 // WebSocket endpoint for 20K point stress test (multi-layer, stateful context)
