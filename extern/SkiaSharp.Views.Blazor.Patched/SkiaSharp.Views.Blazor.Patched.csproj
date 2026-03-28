@@ -14,7 +14,7 @@
     <DefineConstants>$(DefineConstants);__BLAZOR__</DefineConstants>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Must match the path hardcoded in SKHtmlCanvasInterop.cs, DpiWatcherInterop.cs, SizeWatcherInterop.cs -->
-    <StaticWebAssetBasePath>_content/SkiaSharp.Views.Blazor</StaticWebAssetBasePath>
+    <StaticWebAssetBasePath>_content/ModelingEvolution.SkiaSharp.Views.Blazor</StaticWebAssetBasePath>
   </PropertyGroup>
 
   <ItemGroup>

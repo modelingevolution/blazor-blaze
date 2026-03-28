@@ -9,7 +9,7 @@ namespace SkiaSharp.Views.Blazor.Internal
 	internal partial class DpiWatcherInterop : JSModuleInterop
 	{
 		private const string ModuleName = "DpiWatcher";
-		private const string JsFilename = "./_content/SkiaSharp.Views.Blazor/DpiWatcher.js";
+		private const string JsFilename = "./_content/ModelingEvolution.SkiaSharp.Views.Blazor/DpiWatcher.js";
 		private const string StartSymbol = "DpiWatcher.start";
 		private const string StopSymbol = "DpiWatcher.stop";
 		private const string GetDpiSymbol = "DpiWatcher.getDpi";

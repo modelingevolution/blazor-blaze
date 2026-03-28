@@ -10,7 +10,7 @@ namespace SkiaSharp.Views.Blazor.Internal
 	internal partial class SizeWatcherInterop : JSModuleInterop
 	{
 		private const string ModuleName = "SizeWatcher";
-		private const string JsFilename = "./_content/SkiaSharp.Views.Blazor/SizeWatcher.js";
+		private const string JsFilename = "./_content/ModelingEvolution.SkiaSharp.Views.Blazor/SizeWatcher.js";
 		private const string ObserveSymbol = "SizeWatcher.observe";
 		private const string UnobserveSymbol = "SizeWatcher.unobserve";
 

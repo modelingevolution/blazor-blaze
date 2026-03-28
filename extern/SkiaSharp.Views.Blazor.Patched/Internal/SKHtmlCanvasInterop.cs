@@ -10,7 +10,7 @@ namespace SkiaSharp.Views.Blazor.Internal
 	internal partial class SKHtmlCanvasInterop : JSModuleInterop
 	{
 		private const string ModuleName = "SKHtmlCanvas";
-		private const string JsFilename = "./_content/SkiaSharp.Views.Blazor/SKHtmlCanvas.js";
+		private const string JsFilename = "./_content/ModelingEvolution.SkiaSharp.Views.Blazor/SKHtmlCanvas.js";
 		private const string InitGLSymbol = "SKHtmlCanvas.initGL";
 		private const string InitRasterSymbol = "SKHtmlCanvas.initRaster";
 		private const string DeinitSymbol = "SKHtmlCanvas.deinit";
