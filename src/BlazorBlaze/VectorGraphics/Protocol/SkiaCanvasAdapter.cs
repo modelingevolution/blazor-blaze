@@ -5,7 +5,7 @@ namespace BlazorBlaze.VectorGraphics.Protocol;
 /// <summary>
 /// Wraps SKCanvas in Protocol.ICanvas interface.
 /// </summary>
-internal class SkiaCanvasAdapter : ICanvas
+public class SkiaCanvasAdapter : ICanvas
 {
     private readonly SKCanvas _canvas;
 

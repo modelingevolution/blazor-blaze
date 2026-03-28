@@ -7,6 +7,7 @@
     <!-- SkiaSharp -->
     <PackageVersion Include="SkiaSharp" Version="3.119.1" />
     <PackageVersion Include="SkiaSharp.Views.Blazor" Version="3.119.1" />
+    <PackageVersion Include="ModelingEvolution.SkiaSharp.Views.Blazor" Version="1.1.14" />
     <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.1" />
     <PackageVersion Include="SkiaSharp.NativeAssets.WebAssembly" Version="3.119.1" />
 
