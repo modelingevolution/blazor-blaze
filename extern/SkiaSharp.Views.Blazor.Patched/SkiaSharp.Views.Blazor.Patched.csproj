@@ -34,14 +34,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Internal helpers from submodule, EXCLUDING files we override locally for MT fix -->
-    <Compile Include="$(SkiaViewsBlazorRoot)Internal\*.cs"
-             Exclude="$(SkiaViewsBlazorRoot)Internal\ActionHelper.cs;$(SkiaViewsBlazorRoot)Internal\FloatFloatActionHelper.cs"
-             Link="Internal\%(Filename)%(Extension)" />
-    <!-- Local overrides: async Invoke() for WasmEnableThreads compatibility.
-         These are auto-included by the SDK, so we just exclude the submodule versions above. -->
-    <Compile Include="$(SkiaViewsBlazorRoot)SKCanvasView.razor.cs" Link="SKCanvasView.razor.cs" />
-    <Compile Include="$(SkiaViewsBlazorRoot)SKGLView.razor.cs" Link="SKGLView.razor.cs" />
+    <!-- All Internal/*.cs and view code-behind are local overrides for async JS interop (MT WASM fix).
+         The submodule versions use [JSImport] with sync function proxies on NET7+, which breaks
+         WasmEnableThreads. Local files use DotNetObjectReference + async InvokeAsync instead.
+         Local files are auto-included by the SDK from Internal/, SKCanvasView.razor.cs, SKGLView.razor.cs. -->
+
+    <!-- Only these shared types come from the submodule (no MT-related changes needed) -->
     <Compile Include="$(SkiaViewsSharedRoot)SKPaintSurfaceEventArgs.cs" Link="SKPaintSurfaceEventArgs.cs" />
     <Compile Include="$(SkiaViewsSharedRoot)SKPaintGLSurfaceEventArgs.cs" Link="SKPaintGLSurfaceEventArgs.cs" />
   </ItemGroup>
