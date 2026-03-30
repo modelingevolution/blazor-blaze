@@ -43,11 +43,11 @@
         Renderer.Render(Scene, Camera);
     }
 
-    private async void HandleNodeClicked(string? nodeName)
+    private void HandleNodeClicked(object? sender, string? nodeName)
     {
         if (OnNodeClicked.HasDelegate)
         {
-            await InvokeAsync(() => OnNodeClicked.InvokeAsync(nodeName));
+            _ = InvokeAsync(() => OnNodeClicked.InvokeAsync(nodeName));
         }
     }
 

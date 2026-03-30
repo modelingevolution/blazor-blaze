@@ -24,5 +24,5 @@ public interface ISceneRenderer : IAsyncDisposable
     /// Occurs when a scene node is clicked in the rendered view.
     /// The string parameter is the clicked node's name, or null if no node was hit.
     /// </summary>
-    event Action<string?>? NodeClicked;
+    event EventHandler<string?>? NodeClicked;
 }
