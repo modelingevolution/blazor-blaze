@@ -239,4 +239,144 @@ public class SceneGraphTests
         graph.Find("child2").Should().BeNull();
         root.Children.Count.Should().Be(0);
     }
+
+    /// <summary>
+    /// Attaching a standalone node (no parent, not a root) as child of an existing node.
+    /// </summary>
+    [Fact]
+    public void AttachChild_StandaloneNode_Should_BecomeChild()
+    {
+        // Arrange
+        var graph = new SceneGraph();
+        var root = graph.AddRoot("root");
+        var standalone = new SceneNode("standalone");
+
+        // Act
+        root.AttachChild(standalone);
+
+        // Assert
+        root.Children.Count.Should().Be(1);
+        root.Children[0].Should().BeSameAs(standalone);
+        standalone.Parent.Should().BeSameAs(root);
+        graph.Find("standalone").Should().BeSameAs(standalone);
+    }
+
+    /// <summary>
+    /// Reparenting a node from one parent to another should remove from old parent
+    /// and add to new parent.
+    /// </summary>
+    [Fact]
+    public void AttachChild_Reparent_Should_MoveNode()
+    {
+        // Arrange
+        var graph = new SceneGraph();
+        var parentA = graph.AddRoot("parentA");
+        var parentB = graph.AddRoot("parentB");
+        var child = parentA.AddChild("child");
+
+        // Act
+        parentB.AttachChild(child);
+
+        // Assert
+        parentA.Children.Count.Should().Be(0);
+        parentB.Children.Count.Should().Be(1);
+        parentB.Children[0].Should().BeSameAs(child);
+        child.Parent.Should().BeSameAs(parentB);
+    }
+
+    /// <summary>
+    /// Attaching a child node as a new root should remove it from its parent
+    /// and place it at the top level.
+    /// </summary>
+    [Fact]
+    public void AttachRoot_ChildNode_Should_BecomeRoot()
+    {
+        // Arrange
+        var graph = new SceneGraph();
+        var root = graph.AddRoot("root");
+        var child = root.AddChild("child");
+
+        // Act
+        graph.AttachRoot(child);
+
+        // Assert
+        root.Children.Count.Should().Be(0);
+        graph.Roots.Count.Should().Be(2);
+        graph.Roots[1].Should().BeSameAs(child);
+        child.Parent.Should().BeNull();
+    }
+
+    /// <summary>
+    /// Attaching a parent as child of its own descendant should throw (cycle detection).
+    /// </summary>
+    [Fact]
+    public void AttachChild_CycleDetection_Should_Throw()
+    {
+        // Arrange
+        var graph = new SceneGraph();
+        var root = graph.AddRoot("root");
+        var child = root.AddChild("child");
+        var grandchild = child.AddChild("grandchild");
+
+        // Act & Assert -- attaching root under its own grandchild creates a cycle
+        var act = () => grandchild.AttachChild(root);
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    /// <summary>
+    /// Attaching a node that would cause a duplicate name under the target parent should throw.
+    /// </summary>
+    [Fact]
+    public void AttachChild_DuplicateName_Should_Throw()
+    {
+        // Arrange
+        var graph = new SceneGraph();
+        var parent = graph.AddRoot("parent");
+        parent.AddChild("link1");
+
+        var otherParent = graph.AddRoot("other");
+        var link1Duplicate = otherParent.AddChild("link1");
+
+        // Act & Assert -- parent already has "link1"
+        var act = () => parent.AttachChild(link1Duplicate);
+        act.Should().Throw<ArgumentException>();
+    }
+
+    /// <summary>
+    /// Attaching a root node as a root with the same name should throw.
+    /// </summary>
+    [Fact]
+    public void AttachRoot_DuplicateName_Should_Throw()
+    {
+        // Arrange
+        var graph = new SceneGraph();
+        graph.AddRoot("root");
+        var standalone = new SceneNode("root");
+
+        // Act & Assert
+        var act = () => graph.AttachRoot(standalone);
+        act.Should().Throw<ArgumentException>();
+    }
+
+    /// <summary>
+    /// Reparenting a root node (via AttachChild) should remove it from graph roots.
+    /// </summary>
+    [Fact]
+    public void AttachChild_RootNode_Should_RemoveFromGraphRoots()
+    {
+        // Arrange
+        var graph = new SceneGraph();
+        var root1 = graph.AddRoot("root1");
+        var root2 = graph.AddRoot("root2");
+
+        // Act -- make root2 a child of root1
+        root1.AttachChild(root2);
+
+        // Assert
+        graph.Roots.Count.Should().Be(1);
+        graph.Roots[0].Should().BeSameAs(root1);
+        root1.Children.Count.Should().Be(1);
+        root1.Children[0].Should().BeSameAs(root2);
+        root2.Parent.Should().BeSameAs(root1);
+    }
 }

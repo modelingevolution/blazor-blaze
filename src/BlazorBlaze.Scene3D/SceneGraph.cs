@@ -22,9 +22,26 @@ public sealed class SceneGraph
         if (_roots.Exists(r => r.Name == name))
             throw new ArgumentException($"A root node named '{name}' already exists.");
 
-        var node = new SceneNode(name);
+        var node = new SceneNode(name) { Graph = this };
         _roots.Add(node);
         return node;
+    }
+
+    /// <summary>
+    /// Attaches an existing node as a root. Detaches from its current parent first.
+    /// Throws if a root with the same name already exists.
+    /// </summary>
+    public void AttachRoot(SceneNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+
+        if (_roots.Exists(r => r.Name == node.Name))
+            throw new ArgumentException($"A root node named '{node.Name}' already exists.");
+
+        node.DetachFromCurrentParent();
+        node.Parent = null;
+        node.Graph = this;
+        _roots.Add(node);
     }
 
     /// <summary>
@@ -61,5 +78,14 @@ public sealed class SceneGraph
     public void Clear()
     {
         _roots.Clear();
+    }
+
+    /// <summary>
+    /// Internal helper to remove a node from roots without clearing its children.
+    /// Used by SceneNode.DetachFromCurrentParent during reparenting.
+    /// </summary>
+    internal void RemoveRootInternal(SceneNode node)
+    {
+        _roots.Remove(node);
     }
 }

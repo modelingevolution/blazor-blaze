@@ -49,6 +49,12 @@ public sealed class SceneNode
     public SceneNode? Parent { get; internal set; }
 
     /// <summary>
+    /// The scene graph this node belongs to (set for root nodes, inherited via parent chain).
+    /// </summary>
+    [JsonIgnore]
+    internal SceneGraph? Graph { get; set; }
+
+    /// <summary>
     /// Read-only access to child nodes.
     /// </summary>
     public IReadOnlyList<SceneNode> Children => _children;
@@ -70,6 +76,38 @@ public sealed class SceneNode
         var child = new SceneNode(name) { Parent = this };
         _children.Add(child);
         return child;
+    }
+
+    /// <summary>
+    /// Attaches an existing node as a child of this node. The node is detached
+    /// from its current parent (or from the scene graph roots) first.
+    /// Throws if a child with the same name already exists or if attaching would create a cycle.
+    /// </summary>
+    public void AttachChild(SceneNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+
+        if (node == this)
+            throw new InvalidOperationException("Cannot attach a node to itself.");
+
+        if (_children.Exists(c => c.Name == node.Name))
+            throw new ArgumentException($"A child node named '{node.Name}' already exists under '{Name}'.");
+
+        // Cycle detection: walk up from this node; if we hit 'node', it's an ancestor.
+        var current = this;
+        while (current is not null)
+        {
+            if (current == node)
+                throw new InvalidOperationException(
+                    $"Cannot attach '{node.Name}' as child of '{Name}' because it is an ancestor of this node.");
+            current = current.Parent;
+        }
+
+        // Detach from current location.
+        node.DetachFromCurrentParent();
+
+        node.Parent = this;
+        _children.Add(node);
     }
 
     /// <summary>
@@ -119,6 +157,23 @@ public sealed class SceneNode
             current = current.Parent;
         }
         return count;
+    }
+
+    /// <summary>
+    /// Detaches this node from its current parent or from the scene graph roots.
+    /// </summary>
+    internal void DetachFromCurrentParent()
+    {
+        if (Parent is not null)
+        {
+            Parent._children.Remove(this);
+            Parent = null;
+        }
+        else if (Graph is not null)
+        {
+            Graph.RemoveRootInternal(this);
+            Graph = null;
+        }
     }
 
     private void DetachAll()
