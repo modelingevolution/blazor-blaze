@@ -31,7 +31,7 @@
         if (firstRender && Renderer is not null)
         {
             await Renderer.InitializeAsync(_hostElement);
-            Renderer.NodeClicked += HandleNodeClicked;
+            Renderer.OnNodeClicked = HandleNodeClickedAsync;
             _initialized = true;
             Refresh();
         }
@@ -43,19 +43,18 @@
         Renderer.Render(Scene, Camera);
     }
 
-    private void HandleNodeClicked(object? sender, string? nodeName)
+    private Task HandleNodeClickedAsync(string? nodeName)
     {
         if (OnNodeClicked.HasDelegate)
-        {
-            _ = InvokeAsync(() => OnNodeClicked.InvokeAsync(nodeName));
-        }
+            return InvokeAsync(() => OnNodeClicked.InvokeAsync(nodeName));
+        return Task.CompletedTask;
     }
 
     public async ValueTask DisposeAsync()
     {
         if (Renderer is not null)
         {
-            Renderer.NodeClicked -= HandleNodeClicked;
+            Renderer.OnNodeClicked = null;
             if (_initialized)
             {
                 await Renderer.DisposeAsync();

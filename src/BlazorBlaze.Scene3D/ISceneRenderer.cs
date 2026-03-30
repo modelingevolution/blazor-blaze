@@ -21,8 +21,8 @@ public interface ISceneRenderer : IAsyncDisposable
     void Render(SceneGraph scene, Camera3D camera);
 
     /// <summary>
-    /// Occurs when a scene node is clicked in the rendered view.
+    /// Async callback invoked when a scene node is clicked in the rendered view.
     /// The string parameter is the clicked node's name, or null if no node was hit.
     /// </summary>
-    event EventHandler<string?>? NodeClicked;
+    Func<string?, Task>? OnNodeClicked { get; set; }
 }
