@@ -1,0 +1,10 @@
+@namespace BlazorBlaze.Scene3D
+
+<div @ref="_hostElement" class="scene3d-container" style="width: 100%; height: 100%; position: relative;">
+    @if (Renderer is null)
+    {
+        <div class="scene3d-no-renderer" style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: #888;">
+            No renderer configured. Register an ISceneRenderer implementation.
+        </div>
+    }
+</div>
