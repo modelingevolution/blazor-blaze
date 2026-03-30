@@ -17,8 +17,9 @@ public interface ISceneRenderer : IAsyncDisposable
     /// <summary>
     /// Renders the scene graph with the given camera.
     /// Called each time the scene or camera changes.
+    /// Sync adapters can return <see cref="Task.CompletedTask"/>.
     /// </summary>
-    void Render(SceneGraph scene, Camera3D camera);
+    Task RenderAsync(SceneGraph scene, Camera3D camera);
 
     /// <summary>
     /// Async callback invoked when a scene node is clicked in the rendered view.

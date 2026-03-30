@@ -33,14 +33,14 @@
             await Renderer.InitializeAsync(_hostElement);
             Renderer.OnNodeClicked = HandleNodeClickedAsync;
             _initialized = true;
-            Refresh();
+            await RefreshAsync();
         }
     }
 
-    public void Refresh()
+    public async Task RefreshAsync()
     {
         if (!_initialized || Renderer is null || Scene is null || Camera is null) return;
-        Renderer.Render(Scene, Camera);
+        await Renderer.RenderAsync(Scene, Camera);
     }
 
     private Task HandleNodeClickedAsync(NodeClickedEventArgs args)
