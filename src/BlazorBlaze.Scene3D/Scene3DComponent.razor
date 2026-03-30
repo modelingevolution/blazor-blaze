@@ -24,7 +24,7 @@
     public ISceneRenderer? Renderer { get; set; }
 
     [Parameter]
-    public EventCallback<string?> OnNodeClicked { get; set; }
+    public EventCallback<NodeClickedEventArgs> OnNodeClicked { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -43,10 +43,10 @@
         Renderer.Render(Scene, Camera);
     }
 
-    private Task HandleNodeClickedAsync(string? nodeName)
+    private Task HandleNodeClickedAsync(NodeClickedEventArgs args)
     {
         if (OnNodeClicked.HasDelegate)
-            return InvokeAsync(() => OnNodeClicked.InvokeAsync(nodeName));
+            return InvokeAsync(() => OnNodeClicked.InvokeAsync(args));
         return Task.CompletedTask;
     }
 

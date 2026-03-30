@@ -22,7 +22,8 @@ public interface ISceneRenderer : IAsyncDisposable
 
     /// <summary>
     /// Async callback invoked when a scene node is clicked in the rendered view.
-    /// The string parameter is the clicked node's name, or null if no node was hit.
+    /// Adapters populate NodeClickedEventArgs with as much detail as they support
+    /// (WorldPosition may be null if the adapter lacks raycasting).
     /// </summary>
-    Func<string?, Task>? OnNodeClicked { get; set; }
+    Func<NodeClickedEventArgs, Task>? OnNodeClicked { get; set; }
 }
