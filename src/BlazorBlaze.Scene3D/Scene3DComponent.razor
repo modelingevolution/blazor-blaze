@@ -1,3 +1,4 @@
+@using Microsoft.AspNetCore.Components
 @namespace BlazorBlaze.Scene3D
 
 <div @ref="_hostElement" class="scene3d-container" style="width: 100%; height: 100%; position: relative;">
@@ -8,3 +9,57 @@
         </div>
     }
 </div>
+
+@code {
+    private ElementReference _hostElement;
+    private bool _initialized;
+
+    [Parameter]
+    public SceneGraph? Scene { get; set; }
+
+    [Parameter]
+    public Camera3D? Camera { get; set; }
+
+    [Parameter]
+    public ISceneRenderer? Renderer { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> OnNodeClicked { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Renderer is not null)
+        {
+            await Renderer.InitializeAsync(_hostElement);
+            Renderer.NodeClicked += HandleNodeClicked;
+            _initialized = true;
+            Refresh();
+        }
+    }
+
+    public void Refresh()
+    {
+        if (!_initialized || Renderer is null || Scene is null || Camera is null) return;
+        Renderer.Render(Scene, Camera);
+    }
+
+    private async void HandleNodeClicked(string? nodeName)
+    {
+        if (OnNodeClicked.HasDelegate)
+        {
+            await InvokeAsync(() => OnNodeClicked.InvokeAsync(nodeName));
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Renderer is not null)
+        {
+            Renderer.NodeClicked -= HandleNodeClicked;
+            if (_initialized)
+            {
+                await Renderer.DisposeAsync();
+            }
+        }
+    }
+}
