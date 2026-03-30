@@ -89,9 +89,19 @@ public sealed class SceneGraphJsonConverter : JsonConverter<SceneGraph>
         if (element.TryGetProperty("color", out var colorElement))
         {
             var colorStr = colorElement.GetString();
-            if (colorStr is not null && Color.TryParse(colorStr, out var color))
+            if (colorStr is null)
+                throw new JsonException("Color value is null.");
+
+            try
             {
-                node.Color = color;
+                // Use Color.Parse instead of Color.TryParse to work around upstream bug:
+                // Color.TryParse does not restore alpha=255 for 6-digit hex strings,
+                // while Color.Parse handles this correctly.
+                node.Color = Color.Parse(colorStr);
+            }
+            catch (Exception ex) when (ex is not JsonException)
+            {
+                throw new JsonException($"Failed to parse color value '{colorStr}'.", ex);
             }
         }
 
