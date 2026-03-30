@@ -170,6 +170,8 @@ public class SceneGraphTests
         dc1.LocalPose.Y.Should().Be(200);
         dc1.LocalPose.Z.Should().Be(300);
         dc1.Visible.Should().BeTrue();
+        dc1.Color.Should().Be(Color.FromRgb(255, 0, 0));
+        dc1.Opacity.Should().Be(1.0);
 
         var dc2 = deserializedRoot.Children[1];
         dc2.Name.Should().Be("child2");
@@ -177,6 +179,8 @@ public class SceneGraphTests
         ((SphereGeometry)dc2.Geometry!).Radius.Should().Be(5);
         dc2.Visible.Should().BeFalse();
         dc2.LocalPose.X.Should().Be(400);
+        dc2.Color.Should().Be(Color.FromRgb(0, 255, 0));
+        dc2.Opacity.Should().Be(1.0);
     }
 
     /// <summary>
