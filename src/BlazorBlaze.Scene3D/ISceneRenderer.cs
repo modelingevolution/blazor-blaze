@@ -6,7 +6,7 @@ namespace BlazorBlaze.Scene3D;
 /// Interface that rendering adapters implement to translate SceneGraph to a rendered surface.
 /// Scene3D ships with no implementation -- adapters are separate packages.
 /// </summary>
-public interface ISceneRenderer
+public interface ISceneRenderer : IAsyncDisposable
 {
     /// <summary>
     /// Called once when the component is initialized. The adapter creates its rendering surface.
@@ -19,11 +19,6 @@ public interface ISceneRenderer
     /// Called each time the scene or camera changes.
     /// </summary>
     void Render(SceneGraph scene, Camera3D camera);
-
-    /// <summary>
-    /// Called when the component is disposed. The adapter releases rendering resources.
-    /// </summary>
-    Task DisposeAsync();
 
     /// <summary>
     /// Occurs when a scene node is clicked in the rendered view.
