@@ -1,0 +1,91 @@
+namespace BlazorBlaze.Scene3D;
+
+/// <summary>
+/// A mutable tree of SceneNode objects representing a 3D scene.
+/// Agents can programmatically build, inspect, and modify this graph.
+/// This is the stable contract -- rendering adapters translate it to engine-specific types.
+/// </summary>
+public sealed class SceneGraph
+{
+    private readonly List<SceneNode> _roots = new();
+
+    /// <summary>
+    /// Top-level root nodes in the scene.
+    /// </summary>
+    public IReadOnlyList<SceneNode> Roots => _roots;
+
+    /// <summary>
+    /// Adds a new root-level node. Throws if a root with the same name already exists.
+    /// </summary>
+    public SceneNode AddRoot(string name)
+    {
+        if (_roots.Exists(r => r.Name == name))
+            throw new ArgumentException($"A root node named '{name}' already exists.");
+
+        var node = new SceneNode(name) { Graph = this };
+        _roots.Add(node);
+        return node;
+    }
+
+    /// <summary>
+    /// Attaches an existing node as a root. Detaches from its current parent first.
+    /// Throws if a root with the same name already exists.
+    /// </summary>
+    public void AttachRoot(SceneNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+
+        if (_roots.Exists(r => r.Name == node.Name))
+            throw new ArgumentException($"A root node named '{node.Name}' already exists.");
+
+        node.DetachFromCurrentParent();
+        node.Parent = null;
+        node.Graph = this;
+        _roots.Add(node);
+    }
+
+    /// <summary>
+    /// Removes a root node by name. Returns true if found and removed.
+    /// Also removes all descendants.
+    /// </summary>
+    public bool RemoveRoot(string name)
+    {
+        var index = _roots.FindIndex(r => r.Name == name);
+        if (index < 0) return false;
+
+        _roots.RemoveAt(index);
+        return true;
+    }
+
+    /// <summary>
+    /// Finds a node by name across the entire scene using depth-first search.
+    /// Returns the first match found.
+    /// </summary>
+    public SceneNode? Find(string name)
+    {
+        foreach (var root in _roots)
+        {
+            var found = root.Find(name);
+            if (found is not null) return found;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Removes all nodes from the scene.
+    /// </summary>
+    public void Clear()
+    {
+        _roots.Clear();
+    }
+
+    /// <summary>
+    /// Internal helper to remove a node from roots without clearing its children.
+    /// Used by SceneNode.DetachFromCurrentParent during reparenting.
+    /// </summary>
+    internal void RemoveRootInternal(SceneNode node)
+    {
+        _roots.Remove(node);
+    }
+}

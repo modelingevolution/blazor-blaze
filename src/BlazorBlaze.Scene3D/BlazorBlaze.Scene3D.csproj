@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <PackageId>BlazorBlaze.Scene3D</PackageId>
+    <AssemblyName>BlazorBlaze.Scene3D</AssemblyName>
+    <RootNamespace>BlazorBlaze.Scene3D</RootNamespace>
+    <Title>BlazorBlaze Scene3D - Engine-Agnostic 3D Scene Graph for Blazor</Title>
+    <Description>Engine-agnostic 3D scene graph with geometry types, Camera3D, and ISceneRenderer interface for Blazor applications. No rendering engine dependency.</Description>
+    <PackageTags>Blazor;3D;SceneGraph;Rendering;WebGPU;Graphics</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BlazorBlaze.Scene3D.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="ModelingEvolution.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BlazorBlaze\BlazorBlaze.csproj" />
+  </ItemGroup>
+
+</Project>
