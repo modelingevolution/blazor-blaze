@@ -1,0 +1,104 @@
+@page "/threejs-robot"
+@rendermode InteractiveWebAssembly
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Three.js Robot Spike</PageTitle>
+
+<h1>Three.js Robot Simulator Spike</h1>
+
+<p>Status: <strong>@_status</strong></p>
+
+<canvas id="robot-canvas" style="width: 100%; height: 600px; display: block; border: 1px solid #333; border-radius: 4px;"></canvas>
+
+<div style="margin-top: 10px; display: flex; gap: 8px;">
+    <button @onclick="Init" disabled="@(_initialized || _running)">Initialize</button>
+    <button @onclick="StartAnimation" disabled="@(!_initialized || _animating)">Start Animation</button>
+    <button @onclick="StopAnimation" disabled="@(!_animating)">Stop</button>
+    <button @onclick="ToggleAxes" disabled="@(!_initialized)">@(_axesVisible ? "Hide Axes" : "Show Axes")</button>
+</div>
+
+@if (_initialized)
+{
+    <div style="margin-top: 10px; font-size: 0.9em; color: #888;">
+        <p>Drag to orbit | Scroll to zoom | Right-drag to pan</p>
+    </div>
+}
+
+@code {
+    private string _status = "Not started";
+    private bool _running;
+    private bool _initialized;
+    private bool _animating;
+    private bool _axesVisible = true;
+    private IJSObjectReference? _module;
+
+    private async Task Init()
+    {
+        _running = true;
+        _status = "Loading Three.js module...";
+        StateHasChanged();
+
+        try
+        {
+            // Load the ES module directly from WASM context using Blazor's standard pattern
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./robot-scene.js");
+
+            _status = "Initializing scene...";
+            StateHasChanged();
+
+            // After the import, window.robotScene is set by the module's side effect
+            var result = await JS.InvokeAsync<string>("robotScene.init", "robot-canvas");
+            _status = $"Three.js: {result}";
+            _initialized = result == "initialized";
+
+            if (_initialized)
+            {
+                await StartAnimation();
+            }
+        }
+        catch (Exception ex)
+        {
+            _status = $"FAILED — {ex.Message}";
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    private async Task StartAnimation()
+    {
+        var result = await JS.InvokeAsync<string>("robotScene.start");
+        _status = $"Running — {result}";
+        _animating = true;
+    }
+
+    private async Task StopAnimation()
+    {
+        var result = await JS.InvokeAsync<string>("robotScene.stop");
+        _status = result;
+        _animating = false;
+    }
+
+    private async Task ToggleAxes()
+    {
+        var result = await JS.InvokeAsync<string>("robotScene.toggleAxes");
+        _axesVisible = result == "axes visible";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("robotScene.dispose");
+        }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+
+        try { await _module.DisposeAsync(); } catch { }
+    }
+}

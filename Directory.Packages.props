@@ -59,5 +59,8 @@
 
     <!-- Benchmarking -->
     <PackageVersion Include="BenchmarkDotNet" Version="0.14.0" />
+
+    <!-- WebGPU (spike) -->
+    <PackageVersion Include="Evergine.Bindings.WebGPU" Version="2026.3.31.26" />
   </ItemGroup>
 </Project>
