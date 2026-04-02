@@ -228,9 +228,11 @@ create_release() {
     echo "   - ModelingEvolution.SkiaSharp.Views.Blazor $version"
     echo "   - BlazorBlaze $version"
     echo "   - BlazorBlaze.Server $version"
+    echo "   - BlazorBlaze.Scene3D $version"
     echo "3. Check packages on NuGet.org:"
     echo "   - https://www.nuget.org/packages/ModelingEvolution.SkiaSharp.Views.Blazor"
     echo "   - https://www.nuget.org/packages/BlazorBlaze"
+    echo "   - https://www.nuget.org/packages/BlazorBlaze.Scene3D"
 
     return 0
 }

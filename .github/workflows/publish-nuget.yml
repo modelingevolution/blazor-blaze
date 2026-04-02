@@ -28,18 +28,21 @@ jobs:
         dotnet restore extern/SkiaSharp.Views.Blazor.Patched/SkiaSharp.Views.Blazor.Patched.csproj
         dotnet restore src/BlazorBlaze/BlazorBlaze.csproj
         dotnet restore src/BlazorBlaze.Server/BlazorBlaze.Server.csproj
+        dotnet restore src/BlazorBlaze.Scene3D/BlazorBlaze.Scene3D.csproj
 
     - name: Build
       run: |
         dotnet build extern/SkiaSharp.Views.Blazor.Patched/SkiaSharp.Views.Blazor.Patched.csproj -c Release --no-restore
         dotnet build src/BlazorBlaze/BlazorBlaze.csproj -c Release --no-restore
         dotnet build src/BlazorBlaze.Server/BlazorBlaze.Server.csproj -c Release --no-restore
+        dotnet build src/BlazorBlaze.Scene3D/BlazorBlaze.Scene3D.csproj -c Release --no-restore
 
     - name: Pack
       run: |
         dotnet pack extern/SkiaSharp.Views.Blazor.Patched/SkiaSharp.Views.Blazor.Patched.csproj -c Release --no-build -o ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
         dotnet pack src/BlazorBlaze/BlazorBlaze.csproj -c Release --no-build -o ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
         dotnet pack src/BlazorBlaze.Server/BlazorBlaze.Server.csproj -c Release --no-build -o ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+        dotnet pack src/BlazorBlaze.Scene3D/BlazorBlaze.Scene3D.csproj -c Release --no-build -o ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
 
     - name: Push to NuGet.org
       run: |
