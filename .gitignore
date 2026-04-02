@@ -18,6 +18,7 @@
 *.nupkg
 *.snupkg
 .nuget/
+.nuget-help.db*
 packages/
 
 # Test Results
