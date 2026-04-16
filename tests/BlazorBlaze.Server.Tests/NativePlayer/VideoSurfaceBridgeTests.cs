@@ -6,10 +6,17 @@ namespace BlazorBlaze.Server.Tests.NativePlayer;
 /// </summary>
 public sealed class VideoSurfaceBridgeTests
 {
-    private static readonly string WwwrootPath = Path.GetFullPath(
-        Path.Combine(AppContext.BaseDirectory,
-            "..", "..", "..", "..", "..",
-            "src", "BlazorBlaze.Server", "wwwroot"));
+    private static readonly string WwwrootPath = FindWwwroot();
+
+    private static string FindWwwroot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !dir.GetFiles("*.sln").Any())
+            dir = dir.Parent;
+        if (dir == null)
+            throw new DirectoryNotFoundException("Could not locate solution root from " + AppContext.BaseDirectory);
+        return Path.Combine(dir.FullName, "src", "BlazorBlaze.Server", "wwwroot");
+    }
 
     private static string ReadWwwroot(string fileName) =>
         File.ReadAllText(Path.Combine(WwwrootPath, fileName));
@@ -26,21 +33,34 @@ public sealed class VideoSurfaceBridgeTests
     }
 
     /// <summary>
-    /// Scenario 18 — bridge.send() is the only postMessage call site.
-    /// video-surface.js must have zero direct window.webkit postMessage calls;
+    /// Scenario 18 — bridge.send() is the only postMessage call site across all wwwroot JS.
+    /// Every JS file except video-surface-bridge.js must have zero direct postMessage calls;
     /// video-surface-bridge.js must have exactly one.
     /// </summary>
     [Fact]
     public void Scenario18_BridgeSend_IsOnlyPostMessageCallSite()
     {
-        var surface = ReadWwwroot("video-surface.js");
-        var bridge  = ReadWwwroot("video-surface-bridge.js");
+        const string needle = "window.webkit.messageHandlers.native.postMessage";
+        var jsFiles = Directory.GetFiles(WwwrootPath, "*.js", SearchOption.AllDirectories);
 
-        surface.Should().NotContain("window.webkit.messageHandlers.native.postMessage",
-            "video-surface.js must delegate all postMessage calls to the bridge");
+        jsFiles.Should().NotBeEmpty("wwwroot must contain at least the bridge and surface modules");
 
-        CountOccurrences(bridge, "window.webkit.messageHandlers.native.postMessage")
-            .Should().Be(1, "bridge must contain exactly one postMessage call site");
+        foreach (var file in jsFiles)
+        {
+            var content = File.ReadAllText(file);
+            var name    = Path.GetFileName(file);
+
+            if (name == "video-surface-bridge.js")
+            {
+                CountOccurrences(content, needle)
+                    .Should().Be(1, "bridge must contain exactly one postMessage call site");
+            }
+            else
+            {
+                content.Should().NotContain(needle,
+                    $"{name} must delegate all postMessage calls to the bridge, not call it directly");
+            }
+        }
     }
 
     /// <summary>

@@ -3,6 +3,7 @@
 
 export function send(envelope) {
     if (window.webkit?.messageHandlers?.native) {
+        // No try/catch: JSON.stringify failures surface intentionally — circular refs are bugs.
         window.webkit.messageHandlers.native.postMessage(JSON.stringify(envelope));
     }
 }
