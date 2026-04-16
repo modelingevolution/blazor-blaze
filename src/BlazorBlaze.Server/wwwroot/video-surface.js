@@ -1,21 +1,12 @@
 // ES module — no globals on window.
 // Served at _content/BlazorBlaze.Server/video-surface.js
 
+import { send as _bridgeSend } from './video-surface-bridge.js';
+
 const _activeAdapters = new Set();
 
-/**
- * Posts a message to the native WebKitGTK message handler.
- * Used both by the adapter internally and by the registry via module-level export.
- * @param {object} message - The message to send.
- */
 export function postNativeMessage(message) {
-    try {
-        if (window.webkit?.messageHandlers?.native) {
-            window.webkit.messageHandlers.native.postMessage(JSON.stringify(message));
-        }
-    } catch (_) {
-        // Not in WebKitGTK — silently no-op.
-    }
+    _bridgeSend(message);
 }
 
 class NativePlayerAdapter {
