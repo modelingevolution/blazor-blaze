@@ -17,8 +17,8 @@ export function send(envelope) {
     if (!handler) return;
     try {
         handler.postMessage(JSON.stringify(envelope));
-    } catch (_) {
-        // Handler present but rejected the payload — stay silent.
+    } catch (e) {
+        if (handler) console.warn('[bridge] postMessage failed:', e);
     }
 }
 
@@ -28,5 +28,6 @@ export function send(envelope) {
  * @param {string} guid
  */
 export function sendSessionBootstrap(guid) {
+    if (!guid) { console.warn('[bridge] sendSessionBootstrap called with empty guid'); return; }
     send({ type: "event-aggregator-session", id: guid });
 }
