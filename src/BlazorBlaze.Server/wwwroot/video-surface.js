@@ -98,6 +98,10 @@ class NativePlayerAdapter {
         return this.#backgroundColor;
     }
 
+    getRect() {
+        return this.#lastRect;
+    }
+
     // --- Position tracking ---
 
     #startPositionTracking() {

@@ -14,6 +14,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="ModelingEvolution.EventAggregator" />
+    <PackageReference Include="ModelingEvolution.EventAggregator.Blazor" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\BlazorBlaze\BlazorBlaze.csproj" />
   </ItemGroup>
 

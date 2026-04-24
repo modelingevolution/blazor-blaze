@@ -1,8 +1,9 @@
 using BlazorBlaze.Server.NativePlayer;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.JSInterop;
+using ModelingEvolution.EventAggregator;
 using NSubstitute;
+using EventAggregator = ModelingEvolution.EventAggregator.EventAggregator;
 
 namespace BlazorBlaze.Server.Tests.NativePlayer;
 
@@ -11,12 +12,14 @@ namespace BlazorBlaze.Server.Tests.NativePlayer;
 /// </summary>
 public sealed class VideoSurfaceBrowserModeTests : BunitContext
 {
+    private readonly EventAggregator _ea = new(new NullForwarder(), new EventAggregatorPool());
+
     public VideoSurfaceBrowserModeTests()
     {
         var kioskDetector = Substitute.For<IKioskDetector>();
         kioskDetector.IsKiosk.Returns(false);
         Services.AddSingleton(kioskDetector);
-        Services.AddSingleton(Substitute.For<INativePlayerRegistry>());
+        Services.AddSingleton<IEventAggregator>(_ea);
     }
 
     /// <summary>B-020: Renders img with correct src</summary>
@@ -58,24 +61,23 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
     [Fact]
     public void BrowserMode_NoJsModuleImported()
     {
-        var cut = Render<VideoSurface>(p =>
+        Render<VideoSurface>(p =>
             p.Add(vs => vs.StreamUrl, "http://localhost/stream"));
 
-        // bUnit's JSInterop should have no invocations
-        // (the component should never call import in browser mode).
         JSInterop.Invocations.Should().BeEmpty();
     }
 
-    /// <summary>B-024: Does not register with INativePlayerRegistry</summary>
+    /// <summary>B-024: Does not publish PlayerInitialized in browser mode</summary>
     [Fact]
-    public void BrowserMode_DoesNotRegisterWithRegistry()
+    public void BrowserMode_DoesNotPublishPlayerInitialized()
     {
-        var registry = Services.GetRequiredService<INativePlayerRegistry>();
+        var published = new List<PlayerInitialized>();
+        _ea.GetEvent<PlayerInitialized>().Subscribe(e => published.Add(e));
 
-        var cut = Render<VideoSurface>(p =>
+        Render<VideoSurface>(p =>
             p.Add(vs => vs.StreamUrl, "http://localhost/stream"));
 
-        registry.DidNotReceive().Register(Arg.Any<NativePlayerRegistration>());
+        published.Should().BeEmpty();
     }
 
     /// <summary>B-020 (alt): Renders img alt text</summary>

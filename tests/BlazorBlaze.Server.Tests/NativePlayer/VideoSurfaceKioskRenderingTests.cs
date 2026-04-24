@@ -1,7 +1,9 @@
 using BlazorBlaze.Server.NativePlayer;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
+using ModelingEvolution.EventAggregator;
 using NSubstitute;
+using EventAggregator = ModelingEvolution.EventAggregator.EventAggregator;
 
 namespace BlazorBlaze.Server.Tests.NativePlayer;
 
@@ -15,9 +17,8 @@ public sealed class VideoSurfaceKioskRenderingTests : BunitContext
         var kioskDetector = Substitute.For<IKioskDetector>();
         kioskDetector.IsKiosk.Returns(true);
         Services.AddSingleton(kioskDetector);
-        Services.AddSingleton(Substitute.For<INativePlayerRegistry>());
+        Services.AddSingleton<IEventAggregator>(new EventAggregator(new NullForwarder(), new EventAggregatorPool()));
 
-        // Setup JS interop for kiosk mode (the component will try to import module).
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
