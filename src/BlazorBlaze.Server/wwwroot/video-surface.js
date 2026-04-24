@@ -1,21 +1,30 @@
 // ES module — no globals on window.
 // Served at _content/BlazorBlaze.Server/video-surface.js
+//
+// All native-host traffic goes through video-surface-bridge.js — the single
+// postMessage chokepoint (FR-10, NFR-5). Do NOT call
+// window.webkit.messageHandlers.native.postMessage from this file.
+
+import { send as bridgeSend, sendSessionBootstrap } from "./video-surface-bridge.js";
 
 const _activeAdapters = new Set();
 
 /**
- * Posts a message to the native WebKitGTK message handler.
- * Used both by the adapter internally and by the registry via module-level export.
+ * Posts a message to the native WebKitGTK host via the bridge.
+ * Retained as a named export for C# interop (NativePlayerRegistry).
  * @param {object} message - The message to send.
  */
 export function postNativeMessage(message) {
-    try {
-        if (window.webkit?.messageHandlers?.native) {
-            window.webkit.messageHandlers.native.postMessage(JSON.stringify(message));
-        }
-    } catch (_) {
-        // Not in WebKitGTK — silently no-op.
-    }
+    bridgeSend(message);
+}
+
+/**
+ * One-shot bootstrap GUID delivery. Exposed to C# interop so the forwarder
+ * can hand off the session GUID exactly once per circuit start.
+ * @param {string} guid
+ */
+export function postSessionBootstrap(guid) {
+    sendSessionBootstrap(guid);
 }
 
 class NativePlayerAdapter {
