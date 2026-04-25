@@ -11,6 +11,8 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
 {
     private readonly List<PlayerInitialized> _initializedEvents = [];
     private readonly List<PlayerDestroyed> _destroyedEvents = [];
+    private readonly List<PlayRequested> _playRequestedEvents = [];
+    private readonly List<BackgroundColorChanged> _bgColorEvents = [];
     private readonly BunitJSModuleInterop _moduleInterop;
 
     private readonly EventAggregator _ea = new(new NullForwarder(), new EventAggregatorPool());
@@ -27,6 +29,8 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
 
         _ea.GetEvent<PlayerInitialized>().Subscribe(e => _initializedEvents.Add(e));
         _ea.GetEvent<PlayerDestroyed>().Subscribe(e => _destroyedEvents.Add(e));
+        _ea.GetEvent<PlayRequested>().Subscribe(e => _playRequestedEvents.Add(e));
+        _ea.GetEvent<BackgroundColorChanged>().Subscribe(e => _bgColorEvents.Add(e));
     }
 
     [Fact]
@@ -36,12 +40,7 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
             p.Add(vs => vs.StreamUrl, "http://localhost/stream"));
 
         _moduleInterop.VerifyInvoke("createAdapter");
-
-        var initInvocations = JSInterop.Invocations
-            .Where(i => i.Identifier == "init")
-            .ToArray();
-        initInvocations.Should().ContainSingle();
-        initInvocations[0].Arguments[0].Should().Be("http://localhost/stream");
+        _initializedEvents.Should().ContainSingle();
     }
 
     [Fact]
@@ -56,34 +55,38 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
     }
 
     [Fact]
-    public void KioskMode_CreateAdapterReceivesExactlyTwoArgs()
+    public void KioskMode_CreateAdapterReceivesExactlyThreeArgs()
     {
         Render<VideoSurface>(p =>
             p.Add(vs => vs.StreamUrl, "http://localhost/stream"));
 
         var invocation = _moduleInterop.VerifyInvoke("createAdapter");
-        invocation.Arguments.Should().HaveCount(2);
+        invocation.Arguments.Should().HaveCount(3);
+        invocation.Arguments[2].Should().NotBeNull();
     }
 
     [Fact]
-    public void KioskMode_PublishesPlayerInitializedAfterInitAndPlay()
+    public void KioskMode_PublishesPlayRequestedAfterInit()
     {
         Render<VideoSurface>(p => p
             .Add(vs => vs.StreamUrl, "http://localhost/stream")
             .Add(vs => vs.PlayerId, "test-player"));
 
         _initializedEvents.Should().ContainSingle(e => e.Id == "test-player");
+        _playRequestedEvents.Should().ContainSingle(e => e.Id == "test-player");
+    }
 
-        var initInvocations = JSInterop.Invocations
-            .Where(i => i.Identifier == "init")
-            .ToArray();
-        initInvocations.Should().ContainSingle();
-        initInvocations[0].Arguments[0].Should().Be("http://localhost/stream");
+    [Fact]
+    public void KioskMode_DoesNotInvokeNativeInitOrPlay()
+    {
+        Render<VideoSurface>(p =>
+            p.Add(vs => vs.StreamUrl, "http://localhost/stream"));
 
-        var playInvocations = JSInterop.Invocations
-            .Where(i => i.Identifier == "play")
+        var forbidden = JSInterop.Invocations
+            .Where(i => i.Identifier is "init" or "play" or "pause" or "resume"
+                or "refresh" or "destroy" or "setBackgroundColor" or "getBackgroundColor")
             .ToArray();
-        playInvocations.Should().ContainSingle();
+        forbidden.Should().BeEmpty();
     }
 
     [Fact]
@@ -99,20 +102,10 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
 
         _destroyedEvents.Should().ContainSingle(e => e.Id == "test-player");
 
-        var destroyInvocations = JSInterop.Invocations
-            .Where(i => i.Identifier == "destroy")
+        var disposeInvocations = JSInterop.Invocations
+            .Where(i => i.Identifier == "dispose")
             .ToArray();
-        destroyInvocations.Should().ContainSingle();
-    }
-
-    [Fact]
-    public void KioskMode_PlayerInitializedPublishedOnRender()
-    {
-        Render<VideoSurface>(p => p
-            .Add(vs => vs.StreamUrl, "http://localhost/stream")
-            .Add(vs => vs.PlayerId, "test-player"));
-
-        _initializedEvents.Should().ContainSingle(e => e.Id == "test-player");
+        disposeInvocations.Should().ContainSingle();
     }
 
     [Fact]
@@ -171,60 +164,23 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
     }
 
     [Fact]
-    public void KioskMode_BackgroundColor_LifecycleCompletes()
+    public void KioskMode_BackgroundColor_PublishesBackgroundColorChanged()
     {
         Render<VideoSurface>(p => p
             .Add(vs => vs.StreamUrl, "http://localhost/stream")
             .Add(vs => vs.BackgroundColor, "#000000"));
 
+        _bgColorEvents.Should().ContainSingle(e => e.Color == "#000000");
         _initializedEvents.Should().ContainSingle();
-
-        var getInvocations = JSInterop.Invocations
-            .Where(i => i.Identifier == "getBackgroundColor")
-            .ToArray();
-        getInvocations.Should().ContainSingle();
-
-        var setInvocations = JSInterop.Invocations
-            .Where(i => i.Identifier == "setBackgroundColor")
-            .ToArray();
-        setInvocations.Should().ContainSingle();
-        setInvocations[0].Arguments[0].Should().Be("#000000");
     }
 
     [Fact]
-    public async Task KioskMode_BackgroundColor_DisposeRestoresPreviousColor()
-    {
-        _moduleInterop.Setup<string>("getBackgroundColor").SetResult("#ffffff");
-
-        Render<VideoSurface>(p => p
-            .Add(vs => vs.StreamUrl, "http://localhost/stream")
-            .Add(vs => vs.BackgroundColor, "#000000"));
-
-        _initializedEvents.Should().ContainSingle();
-
-        await DisposeComponentsAsync();
-
-        _destroyedEvents.Should().ContainSingle();
-
-        var setInvocations = JSInterop.Invocations
-            .Where(i => i.Identifier == "setBackgroundColor")
-            .ToArray();
-        setInvocations.Should().HaveCount(2);
-        setInvocations[0].Arguments[0].Should().Be("#000000");
-        setInvocations[1].Arguments[0].Should().Be("#ffffff");
-    }
-
-    [Fact]
-    public void KioskMode_NoBackgroundColor_LifecycleCompletes()
+    public void KioskMode_NoBackgroundColor_DoesNotPublishBackgroundColorChanged()
     {
         Render<VideoSurface>(p =>
             p.Add(vs => vs.StreamUrl, "http://localhost/stream"));
 
         _initializedEvents.Should().ContainSingle();
-
-        var bgInvocations = JSInterop.Invocations
-            .Where(i => i.Identifier is "setBackgroundColor" or "getBackgroundColor")
-            .ToArray();
-        bgInvocations.Should().BeEmpty();
+        _bgColorEvents.Should().BeEmpty();
     }
 }

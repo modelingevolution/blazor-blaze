@@ -4,6 +4,12 @@
 // All native-host traffic goes through video-surface-bridge.js — the single
 // postMessage chokepoint (FR-10, NFR-5). Do NOT call
 // window.webkit.messageHandlers.native.postMessage from this file.
+//
+// After the EventAggregator session GUID has been delivered (one-shot bootstrap
+// via video-surface-bridge.js), every subsequent message from .NET to native
+// flows through the EventAggregator WebSocket as a [ProtoContract] event.
+// This adapter therefore performs ZERO native posts; it only watches DOM rect
+// changes and forwards them back to .NET via the supplied DotNetObjectReference.
 
 import { send as bridgeSend, sendSessionBootstrap } from "./video-surface-bridge.js";
 
@@ -11,7 +17,8 @@ const _activeAdapters = new Set();
 
 /**
  * Posts a message to the native WebKitGTK host via the bridge.
- * Retained as a named export for C# interop (NativePlayerRegistry).
+ * Retained as a named export for low-level C# interop callers; adapter
+ * instances must NOT use it.
  * @param {object} message - The message to send.
  */
 export function postNativeMessage(message) {
@@ -30,29 +37,18 @@ export function postSessionBootstrap(guid) {
 class NativePlayerAdapter {
     #element;
     #playerId;
+    #dotnetRef;
     #resizeObserver;
     #mutationObserver;
     #rafPending = false;
     #lastRect = { x: 0, y: 0, width: 0, height: 0 };
-    #backgroundColor = null;
-    #destroyed = false;
+    #disposed = false;
 
-    constructor(element, playerId) {
+    constructor(element, playerId, dotnetRef) {
         this.#element = element;
         this.#playerId = playerId;
-    }
-
-    init(streamUrl) {
-        const rect = this.#getRect();
-        this.#lastRect = rect;
-
-        postNativeMessage({
-            type: "init",
-            id: this.#playerId,
-            position: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-            streamUrl: streamUrl
-        });
-
+        this.#dotnetRef = dotnetRef;
+        this.#lastRect = this.#computeRect();
         this.#startPositionTracking();
 
         // Delayed retries for layout settling.
@@ -60,49 +56,17 @@ class NativePlayerAdapter {
         setTimeout(() => this.#checkPosition(), 500);
     }
 
-    play() {
-        postNativeMessage({ type: "play", id: this.#playerId });
-    }
-
-    pause() {
-        postNativeMessage({ type: "pause", id: this.#playerId });
-    }
-
-    resume() {
-        postNativeMessage({ type: "resume", id: this.#playerId });
-    }
-
-    refresh() {
-        postNativeMessage({ type: "refresh", id: this.#playerId });
-    }
-
-    destroy() {
-        if (this.#destroyed) return;
-        this.#destroyed = true;
-
-        postNativeMessage({ type: "destroy-player", id: this.#playerId });
-        this.#stopPositionTracking();
-        _activeAdapters.delete(this);
-    }
-
-    postMessage(msg) {
-        postNativeMessage(msg);
-    }
-
-    setBackgroundColor(color) {
-        this.#backgroundColor = color;
-        postNativeMessage({ type: "set-background-color", color: color });
-    }
-
-    getBackgroundColor() {
-        return this.#backgroundColor;
-    }
-
     getRect() {
         return this.#lastRect;
     }
 
-    // --- Position tracking ---
+    dispose() {
+        if (this.#disposed) return;
+        this.#disposed = true;
+        this.#stopPositionTracking();
+        this.#dotnetRef = null;
+        _activeAdapters.delete(this);
+    }
 
     #startPositionTracking() {
         this.#resizeObserver = new ResizeObserver(() => this.#schedulePositionUpdate());
@@ -119,7 +83,7 @@ class NativePlayerAdapter {
         this._onScroll = () => this.#schedulePositionUpdate();
 
         window.addEventListener("resize", this._onResize);
-        window.addEventListener("scroll", this._onScroll, true); // capture phase for nested containers
+        window.addEventListener("scroll", this._onScroll, true);
     }
 
     #stopPositionTracking() {
@@ -142,7 +106,7 @@ class NativePlayerAdapter {
     }
 
     #schedulePositionUpdate() {
-        if (this.#rafPending || this.#destroyed) return;
+        if (this.#rafPending || this.#disposed) return;
         this.#rafPending = true;
         requestAnimationFrame(() => {
             this.#rafPending = false;
@@ -151,9 +115,9 @@ class NativePlayerAdapter {
     }
 
     #checkPosition() {
-        if (this.#destroyed) return;
+        if (this.#disposed) return;
 
-        const rect = this.#getRect();
+        const rect = this.#computeRect();
         if (rect.x === this.#lastRect.x &&
             rect.y === this.#lastRect.y &&
             rect.width === this.#lastRect.width &&
@@ -162,17 +126,16 @@ class NativePlayerAdapter {
         }
 
         this.#lastRect = rect;
-        postNativeMessage({
-            type: "set-layout",
-            id: this.#playerId,
-            x: rect.x,
-            y: rect.y,
-            width: rect.width,
-            height: rect.height
-        });
+        const ref = this.#dotnetRef;
+        if (!ref) return;
+        try {
+            ref.invokeMethodAsync("OnRectChanged", rect.x, rect.y, rect.width, rect.height);
+        } catch (e) {
+            console.warn('[video-surface] OnRectChanged invocation failed:', e);
+        }
     }
 
-    #getRect() {
+    #computeRect() {
         const r = this.#element.getBoundingClientRect();
         return {
             x: Math.round(r.x),
@@ -183,21 +146,22 @@ class NativePlayerAdapter {
     }
 }
 
-// Cleanup all adapters on beforeunload.
 window.addEventListener("beforeunload", () => {
     for (const adapter of _activeAdapters) {
-        adapter.destroy();
+        adapter.dispose();
     }
 });
 
 /**
- * Creates a native player adapter for the given element.
+ * Creates a native player adapter for the given element. The adapter only
+ * watches rect changes; all native traffic flows through the EventAggregator.
  * @param {HTMLElement} element - The placeholder element.
  * @param {string} playerId - The unique player ID.
+ * @param {object} dotnetRef - DotNetObjectReference to the owning .NET component (must expose OnRectChanged).
  * @returns {NativePlayerAdapter} The adapter instance.
  */
-export function createAdapter(element, playerId) {
-    const adapter = new NativePlayerAdapter(element, playerId);
+export function createAdapter(element, playerId, dotnetRef) {
+    const adapter = new NativePlayerAdapter(element, playerId, dotnetRef);
     _activeAdapters.add(adapter);
     return adapter;
 }
