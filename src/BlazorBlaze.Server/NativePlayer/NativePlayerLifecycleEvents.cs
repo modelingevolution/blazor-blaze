@@ -1,16 +1,18 @@
 using ModelingEvolution.EventAggregator;
+using ProtoBuf;
 
 namespace BlazorBlaze.Server.NativePlayer;
 
+[ProtoContract]
 [SubscriptionScope(SubscriptionScopeFlags.NativeCpp | SubscriptionScopeFlags.ServerSide)]
 public record PlayerInitialized
 {
-    public string Id { get; init; } = "";
-    public string Url { get; init; } = "";
-    public int X { get; init; }
-    public int Y { get; init; }
-    public int Width { get; init; }
-    public int Height { get; init; }
+    [ProtoMember(1)] public string Id { get; init; } = "";
+    [ProtoMember(2)] public string Url { get; init; } = "";
+    [ProtoMember(3)] public int X { get; init; }
+    [ProtoMember(4)] public int Y { get; init; }
+    [ProtoMember(5)] public int Width { get; init; }
+    [ProtoMember(6)] public int Height { get; init; }
 
     public PlayerInitialized() { }
 
@@ -18,10 +20,11 @@ public record PlayerInitialized
         => (Id, Url, X, Y, Width, Height) = (id, url, x, y, width, height);
 }
 
+[ProtoContract]
 [SubscriptionScope(SubscriptionScopeFlags.NativeCpp | SubscriptionScopeFlags.ServerSide)]
 public record PlayerDestroyed
 {
-    public string Id { get; init; } = "";
+    [ProtoMember(1)] public string Id { get; init; } = "";
 
     public PlayerDestroyed() { }
 
