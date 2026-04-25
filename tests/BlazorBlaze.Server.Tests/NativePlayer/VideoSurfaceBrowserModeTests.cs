@@ -7,9 +7,6 @@ using EventAggregator = ModelingEvolution.EventAggregator.EventAggregator;
 
 namespace BlazorBlaze.Server.Tests.NativePlayer;
 
-/// <summary>
-/// Tests B-020 through B-024: VideoSurface browser mode (IsKiosk == false).
-/// </summary>
 public sealed class VideoSurfaceBrowserModeTests : BunitContext
 {
     private readonly EventAggregator _ea = new(new NullForwarder(), new EventAggregatorPool());
@@ -22,7 +19,6 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
         Services.AddSingleton<IEventAggregator>(_ea);
     }
 
-    /// <summary>B-020: Renders img with correct src</summary>
     [Fact]
     public void BrowserMode_RendersImgWithCorrectSrc()
     {
@@ -33,7 +29,6 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
         img.GetAttribute("src").Should().Be("http://localhost:5001/mjpeg");
     }
 
-    /// <summary>B-021: Renders img with passed Style and Class</summary>
     [Fact]
     public void BrowserMode_RendersImgWithStyleAndClass()
     {
@@ -47,7 +42,6 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
         img.GetAttribute("class").Should().Contain("video-preview");
     }
 
-    /// <summary>B-022: No invisible placeholder element</summary>
     [Fact]
     public void BrowserMode_DoesNotRenderPlaceholderDiv()
     {
@@ -57,7 +51,6 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
         cut.FindAll("div").Should().BeEmpty();
     }
 
-    /// <summary>B-023: No native player messages sent (no JS module loaded)</summary>
     [Fact]
     public void BrowserMode_NoJsModuleImported()
     {
@@ -67,7 +60,6 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
         JSInterop.Invocations.Should().BeEmpty();
     }
 
-    /// <summary>B-024: Does not publish PlayerInitialized in browser mode</summary>
     [Fact]
     public void BrowserMode_DoesNotPublishPlayerInitialized()
     {
@@ -80,7 +72,6 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
         published.Should().BeEmpty();
     }
 
-    /// <summary>B-020 (alt): Renders img alt text</summary>
     [Fact]
     public void BrowserMode_RendersImgWithAltText()
     {
@@ -92,7 +83,6 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
         img.GetAttribute("alt").Should().Be("Camera feed");
     }
 
-    /// <summary>B-020 (default alt): Uses default alt text</summary>
     [Fact]
     public void BrowserMode_DefaultAltText()
     {

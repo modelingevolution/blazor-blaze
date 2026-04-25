@@ -7,12 +7,6 @@ using EventAggregator = ModelingEvolution.EventAggregator.EventAggregator;
 
 namespace BlazorBlaze.Server.Tests.NativePlayer;
 
-/// <summary>
-/// Tests B-040 through B-052: VideoSurface kiosk mode lifecycle and background color.
-/// Uses bUnit's JSInterop planned invocations to verify actual JS calls (init, play,
-/// destroy, setBackgroundColor, getBackgroundColor). EA event publication is verified
-/// via a real IEventAggregator subscription.
-/// </summary>
 public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
 {
     private readonly List<PlayerInitialized> _initializedEvents = [];
@@ -35,8 +29,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         _ea.GetEvent<PlayerDestroyed>().Subscribe(e => _destroyedEvents.Add(e));
     }
 
-    /// <summary>B-040: JS module is imported and createAdapter is called on first render.
-    /// Also verifies that init is invoked on the adapter with the correct StreamUrl.</summary>
     [Fact]
     public void KioskMode_ImportsModuleAndCreatesAdapterOnFirstRender()
     {
@@ -52,7 +44,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         initInvocations[0].Arguments[0].Should().Be("http://localhost/stream");
     }
 
-    /// <summary>B-041: createAdapter receives the player ID as second argument</summary>
     [Fact]
     public void KioskMode_CreateAdapterReceivesPlayerId()
     {
@@ -64,7 +55,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         invocation.Arguments[1].Should().Be("my-player");
     }
 
-    /// <summary>B-042: createAdapter receives exactly 2 arguments (element, playerId) - no sessionId</summary>
     [Fact]
     public void KioskMode_CreateAdapterReceivesExactlyTwoArgs()
     {
@@ -75,7 +65,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         invocation.Arguments.Should().HaveCount(2);
     }
 
-    /// <summary>B-043: PlayerInitialized published after init and play complete.</summary>
     [Fact]
     public void KioskMode_PublishesPlayerInitializedAfterInitAndPlay()
     {
@@ -97,7 +86,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         playInvocations.Should().ContainSingle();
     }
 
-    /// <summary>B-044: PlayerDestroyed published and destroy JS called on DisposeAsync.</summary>
     [Fact]
     public async Task KioskMode_PublishesPlayerDestroyedOnDispose()
     {
@@ -117,7 +105,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         destroyInvocations.Should().ContainSingle();
     }
 
-    /// <summary>B-045: PlayerInitialized published after first render (EA path).</summary>
     [Fact]
     public void KioskMode_PlayerInitializedPublishedOnRender()
     {
@@ -128,7 +115,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         _initializedEvents.Should().ContainSingle(e => e.Id == "test-player");
     }
 
-    /// <summary>B-046: PlayerInitialized contains a valid player ID.</summary>
     [Fact]
     public void KioskMode_PlayerInitialized_ContainsPlayerId()
     {
@@ -140,7 +126,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         _initializedEvents[0].Id.Should().Be("test-player");
     }
 
-    /// <summary>B-047: DisposeAsync catches JSDisconnectedException without propagating.</summary>
     [Fact]
     public void KioskMode_DisposeAsync_CatchesJSDisconnectedException()
     {
@@ -161,7 +146,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         act.Should().NotThrow();
     }
 
-    /// <summary>B-048: DisposeAsync catches InvalidOperationException without propagating.</summary>
     [Fact]
     public void KioskMode_DoubleDispose_DoesNotThrow()
     {
@@ -176,7 +160,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         act.Should().NotThrow();
     }
 
-    /// <summary>B-049: Auto-generated player ID starts with "vs-" prefix.</summary>
     [Fact]
     public void KioskMode_AutoGeneratesPlayerId()
     {
@@ -187,7 +170,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         _initializedEvents[0].Id.Should().StartWith("vs-");
     }
 
-    /// <summary>B-050: BackgroundColor param sends setBackgroundColor and getBackgroundColor on init.</summary>
     [Fact]
     public void KioskMode_BackgroundColor_LifecycleCompletes()
     {
@@ -209,7 +191,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         setInvocations[0].Arguments[0].Should().Be("#000000");
     }
 
-    /// <summary>B-051: Dispose restores previous background color via setBackgroundColor.</summary>
     [Fact]
     public async Task KioskMode_BackgroundColor_DisposeRestoresPreviousColor()
     {
@@ -233,7 +214,6 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
         setInvocations[1].Arguments[0].Should().Be("#ffffff");
     }
 
-    /// <summary>B-052: No set-background-color when BackgroundColor param is null.</summary>
     [Fact]
     public void KioskMode_NoBackgroundColor_LifecycleCompletes()
     {

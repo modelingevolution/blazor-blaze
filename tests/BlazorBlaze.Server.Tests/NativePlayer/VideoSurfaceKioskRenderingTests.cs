@@ -7,9 +7,6 @@ using EventAggregator = ModelingEvolution.EventAggregator.EventAggregator;
 
 namespace BlazorBlaze.Server.Tests.NativePlayer;
 
-/// <summary>
-/// Tests B-030 through B-034: VideoSurface kiosk mode rendering.
-/// </summary>
 public sealed class VideoSurfaceKioskRenderingTests : BunitContext
 {
     public VideoSurfaceKioskRenderingTests()
@@ -22,7 +19,6 @@ public sealed class VideoSurfaceKioskRenderingTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
-    /// <summary>B-030: Renders invisible placeholder (not img)</summary>
     [Fact]
     public void KioskMode_RendersPlaceholderDiv()
     {
@@ -32,7 +28,6 @@ public sealed class VideoSurfaceKioskRenderingTests : BunitContext
         cut.Find("div").Should().NotBeNull();
     }
 
-    /// <summary>B-031: Placeholder has visibility:hidden and opacity:0</summary>
     [Fact]
     public void KioskMode_PlaceholderHasHiddenVisibility()
     {
@@ -45,7 +40,6 @@ public sealed class VideoSurfaceKioskRenderingTests : BunitContext
         style.Should().Contain("opacity:0");
     }
 
-    /// <summary>B-032: Placeholder has correct width/height from parameters</summary>
     [Fact]
     public void KioskMode_PlaceholderHasCorrectDimensions()
     {
@@ -60,7 +54,6 @@ public sealed class VideoSurfaceKioskRenderingTests : BunitContext
         style.Should().Contain("height:720px");
     }
 
-    /// <summary>B-033: Placeholder maintains layout space (not display:none)</summary>
     [Fact]
     public void KioskMode_PlaceholderNotDisplayNone()
     {
@@ -73,7 +66,6 @@ public sealed class VideoSurfaceKioskRenderingTests : BunitContext
         style.Should().NotContain("display: none");
     }
 
-    /// <summary>B-034: No img element rendered in kiosk mode</summary>
     [Fact]
     public void KioskMode_DoesNotRenderImgElement()
     {
@@ -83,7 +75,6 @@ public sealed class VideoSurfaceKioskRenderingTests : BunitContext
         cut.FindAll("img").Should().BeEmpty();
     }
 
-    /// <summary>B-032 (default): Default dimensions are 1920x1080</summary>
     [Fact]
     public void KioskMode_DefaultDimensionsAre1920x1080()
     {
