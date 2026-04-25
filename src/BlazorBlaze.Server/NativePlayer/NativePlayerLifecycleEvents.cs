@@ -1,10 +1,8 @@
 using ModelingEvolution.EventAggregator;
-using ModelingEvolution.EventAggregator.Blazor;
 
 namespace BlazorBlaze.Server.NativePlayer;
 
 [SubscriptionScope(SubscriptionScopeFlags.NativeCpp | SubscriptionScopeFlags.ServerSide)]
-[NativeCppEventName("init")]
 public record PlayerInitialized
 {
     public string Id { get; init; } = "";
@@ -21,7 +19,6 @@ public record PlayerInitialized
 }
 
 [SubscriptionScope(SubscriptionScopeFlags.NativeCpp | SubscriptionScopeFlags.ServerSide)]
-[NativeCppEventName("destroy-player")]
 public record PlayerDestroyed
 {
     public string Id { get; init; } = "";
