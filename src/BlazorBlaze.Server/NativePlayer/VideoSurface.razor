@@ -24,7 +24,7 @@ else
     private ElementReference _placeholderRef;
     private IJSObjectReference? _jsModule;
     private IJSObjectReference? _jsAdapter;
-    private string? _resolvedPlayerId;
+    private string _resolvedPlayerId = string.Empty;
     private string? _previousBackgroundColor;
 
     /// <summary>
@@ -102,7 +102,7 @@ else
 
         var rect = await _jsAdapter.InvokeAsync<PlayerRect>("getRect");
         await EventAggregator.GetEvent<PlayerInitialized>().Publish(
-            new PlayerInitialized(_resolvedPlayerId!, StreamUrl, rect.X, rect.Y, rect.Width, rect.Height));
+            new PlayerInitialized(_resolvedPlayerId, StreamUrl, rect.X, rect.Y, rect.Width, rect.Height));
     }
 
     public async ValueTask DisposeAsync()
@@ -110,7 +110,7 @@ else
         if (!KioskDetector.IsKiosk || _jsAdapter is null)
             return;
 
-        await EventAggregator.GetEvent<PlayerDestroyed>().Publish(new PlayerDestroyed(_resolvedPlayerId!));
+        await EventAggregator.GetEvent<PlayerDestroyed>().Publish(new PlayerDestroyed(_resolvedPlayerId));
 
         try
         {
