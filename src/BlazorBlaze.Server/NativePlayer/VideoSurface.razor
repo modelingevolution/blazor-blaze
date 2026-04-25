@@ -1,8 +1,9 @@
 @using Microsoft.Extensions.Logging
 @using Microsoft.JSInterop
+@using ModelingEvolution.EventAggregator
 @implements IAsyncDisposable
 @inject IKioskDetector KioskDetector
-@inject INativePlayerRegistry Registry
+@inject IEventAggregator EventAggregator
 @inject IJSRuntime JsRuntime
 @inject ILogger<VideoSurface> Logger
 
@@ -23,7 +24,7 @@ else
     private ElementReference _placeholderRef;
     private IJSObjectReference? _jsModule;
     private IJSObjectReference? _jsAdapter;
-    private string? _resolvedPlayerId;
+    private string _resolvedPlayerId = string.Empty;
     private string? _previousBackgroundColor;
 
     /// <summary>
@@ -85,7 +86,7 @@ else
             return;
 
         _jsModule = await JsRuntime.InvokeAsync<IJSObjectReference>(
-            "import", NativePlayerRegistry.ModulePath);
+            "import", VideoSurfaceConstants.ModulePath);
 
         _jsAdapter = await _jsModule.InvokeAsync<IJSObjectReference>(
             "createAdapter", _placeholderRef, _resolvedPlayerId);
@@ -99,7 +100,9 @@ else
         await _jsAdapter.InvokeVoidAsync("init", StreamUrl);
         await _jsAdapter.InvokeVoidAsync("play");
 
-        Registry.Register(new NativePlayerRegistration(_resolvedPlayerId!));
+        var rect = await _jsAdapter.InvokeAsync<PlayerRect>("getRect");
+        await EventAggregator.GetEvent<PlayerInitialized>().Publish(
+            new PlayerInitialized(_resolvedPlayerId, StreamUrl, rect.X, rect.Y, rect.Width, rect.Height));
     }
 
     public async ValueTask DisposeAsync()
@@ -107,10 +110,10 @@ else
         if (!KioskDetector.IsKiosk || _jsAdapter is null)
             return;
 
+        await EventAggregator.GetEvent<PlayerDestroyed>().Publish(new PlayerDestroyed(_resolvedPlayerId));
+
         try
         {
-            Registry.Unregister(_resolvedPlayerId!);
-
             if (_previousBackgroundColor is not null)
             {
                 await _jsAdapter.InvokeVoidAsync("setBackgroundColor", _previousBackgroundColor);

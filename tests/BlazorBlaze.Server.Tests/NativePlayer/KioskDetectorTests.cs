@@ -4,9 +4,6 @@ using NSubstitute;
 
 namespace BlazorBlaze.Server.Tests.NativePlayer;
 
-/// <summary>
-/// Tests B-001 through B-007: IKioskDetector behavior.
-/// </summary>
 public sealed class KioskDetectorTests
 {
     private static KioskDetector CreateDetector(string? userAgent)
@@ -21,7 +18,6 @@ public sealed class KioskDetectorTests
         return new KioskDetector(accessor);
     }
 
-    /// <summary>B-001: UA contains token -> IsKiosk == true</summary>
     [Fact]
     public void IsKiosk_ReturnsTrue_WhenUserAgentContainsToken()
     {
@@ -30,7 +26,6 @@ public sealed class KioskDetectorTests
         detector.IsKiosk.Should().BeTrue();
     }
 
-    /// <summary>B-002: Normal UA -> IsKiosk == false</summary>
     [Fact]
     public void IsKiosk_ReturnsFalse_WhenUserAgentDoesNotContainToken()
     {
@@ -39,7 +34,6 @@ public sealed class KioskDetectorTests
         detector.IsKiosk.Should().BeFalse();
     }
 
-    /// <summary>B-003: Empty/null UA -> IsKiosk == false</summary>
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -50,7 +44,6 @@ public sealed class KioskDetectorTests
         detector.IsKiosk.Should().BeFalse();
     }
 
-    /// <summary>B-004: Token matching is case-insensitive</summary>
     [Theory]
     [InlineData("Mozilla/5.0 ROCKETWELDER-KIOSK/1.0")]
     [InlineData("Mozilla/5.0 rocketwelder-kiosk/1.0")]
@@ -62,14 +55,11 @@ public sealed class KioskDetectorTests
         detector.IsKiosk.Should().BeTrue();
     }
 
-    /// <summary>B-006: Detection is synchronous (property, no async)</summary>
     [Fact]
     public void IsKiosk_IsSynchronousProperty()
     {
         var detector = CreateDetector("Mozilla/5.0 RocketWelder-Kiosk/1.0");
 
-        // Property access is synchronous — no Task/ValueTask return type.
-        // Accessing it multiple times returns the same value instantly.
         var result1 = detector.IsKiosk;
         var result2 = detector.IsKiosk;
 
@@ -77,7 +67,6 @@ public sealed class KioskDetectorTests
         result1.Should().BeTrue();
     }
 
-    /// <summary>B-007: Value persists for Blazor circuit lifetime (cached in constructor)</summary>
     [Fact]
     public void IsKiosk_ValueIsCached_DoesNotReReadHeaders()
     {
@@ -91,7 +80,6 @@ public sealed class KioskDetectorTests
 
         detector.IsKiosk.Should().BeTrue();
 
-        // Even if the underlying HttpContext changes, the cached value persists.
         accessor.HttpContext.Returns((HttpContext?)null);
         detector.IsKiosk.Should().BeTrue();
     }

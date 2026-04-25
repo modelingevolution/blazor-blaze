@@ -1,25 +1,24 @@
 using BlazorBlaze.Server.NativePlayer;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.JSInterop;
+using ModelingEvolution.EventAggregator;
 using NSubstitute;
+using EventAggregator = ModelingEvolution.EventAggregator.EventAggregator;
 
 namespace BlazorBlaze.Server.Tests.NativePlayer;
 
-/// <summary>
-/// Tests B-020 through B-024: VideoSurface browser mode (IsKiosk == false).
-/// </summary>
 public sealed class VideoSurfaceBrowserModeTests : BunitContext
 {
+    private readonly EventAggregator _ea = new(new NullForwarder(), new EventAggregatorPool());
+
     public VideoSurfaceBrowserModeTests()
     {
         var kioskDetector = Substitute.For<IKioskDetector>();
         kioskDetector.IsKiosk.Returns(false);
         Services.AddSingleton(kioskDetector);
-        Services.AddSingleton(Substitute.For<INativePlayerRegistry>());
+        Services.AddSingleton<IEventAggregator>(_ea);
     }
 
-    /// <summary>B-020: Renders img with correct src</summary>
     [Fact]
     public void BrowserMode_RendersImgWithCorrectSrc()
     {
@@ -30,7 +29,6 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
         img.GetAttribute("src").Should().Be("http://localhost:5001/mjpeg");
     }
 
-    /// <summary>B-021: Renders img with passed Style and Class</summary>
     [Fact]
     public void BrowserMode_RendersImgWithStyleAndClass()
     {
@@ -44,7 +42,6 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
         img.GetAttribute("class").Should().Contain("video-preview");
     }
 
-    /// <summary>B-022: No invisible placeholder element</summary>
     [Fact]
     public void BrowserMode_DoesNotRenderPlaceholderDiv()
     {
@@ -54,31 +51,27 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
         cut.FindAll("div").Should().BeEmpty();
     }
 
-    /// <summary>B-023: No native player messages sent (no JS module loaded)</summary>
     [Fact]
     public void BrowserMode_NoJsModuleImported()
     {
-        var cut = Render<VideoSurface>(p =>
+        Render<VideoSurface>(p =>
             p.Add(vs => vs.StreamUrl, "http://localhost/stream"));
 
-        // bUnit's JSInterop should have no invocations
-        // (the component should never call import in browser mode).
         JSInterop.Invocations.Should().BeEmpty();
     }
 
-    /// <summary>B-024: Does not register with INativePlayerRegistry</summary>
     [Fact]
-    public void BrowserMode_DoesNotRegisterWithRegistry()
+    public void BrowserMode_DoesNotPublishPlayerInitialized()
     {
-        var registry = Services.GetRequiredService<INativePlayerRegistry>();
+        var published = new List<PlayerInitialized>();
+        _ea.GetEvent<PlayerInitialized>().Subscribe(e => published.Add(e));
 
-        var cut = Render<VideoSurface>(p =>
+        Render<VideoSurface>(p =>
             p.Add(vs => vs.StreamUrl, "http://localhost/stream"));
 
-        registry.DidNotReceive().Register(Arg.Any<NativePlayerRegistration>());
+        published.Should().BeEmpty();
     }
 
-    /// <summary>B-020 (alt): Renders img alt text</summary>
     [Fact]
     public void BrowserMode_RendersImgWithAltText()
     {
@@ -90,7 +83,6 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
         img.GetAttribute("alt").Should().Be("Camera feed");
     }
 
-    /// <summary>B-020 (default alt): Uses default alt text</summary>
     [Fact]
     public void BrowserMode_DefaultAltText()
     {

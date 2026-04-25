@@ -38,6 +38,8 @@
     <!-- ModelingEvolution -->
     <PackageVersion Include="ModelingEvolution.Drawing" Version="1.4.2.57" />
     <PackageVersion Include="ModelingEvolution.Bytes" Version="3.0.0" />
+    <PackageVersion Include="ModelingEvolution.EventAggregator" Version="2.5.0" />
+    <PackageVersion Include="ModelingEvolution.EventAggregator.Blazor" Version="2.5.0" />
 
     <!-- Testing -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
