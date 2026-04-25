@@ -22,4 +22,8 @@
     <ProjectReference Include="..\BlazorBlaze\BlazorBlaze.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="BlazorBlaze.Server.Tests" />
+  </ItemGroup>
+
 </Project>
