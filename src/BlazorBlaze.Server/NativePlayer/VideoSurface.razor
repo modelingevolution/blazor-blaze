@@ -114,6 +114,10 @@ else
         {
             Logger.LogDebug(ex, "VideoSurface {PlayerId}: circuit disconnected during dispose", _resolvedPlayerId);
         }
+        catch (OperationCanceledException ex)
+        {
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: JS call cancelled during dispose", _resolvedPlayerId);
+        }
         catch (InvalidOperationException ex)
         {
             Logger.LogDebug(ex, "VideoSurface {PlayerId}: JS runtime unavailable during dispose", _resolvedPlayerId);
@@ -129,6 +133,10 @@ else
         catch (JSDisconnectedException ex)
         {
             Logger.LogDebug(ex, "VideoSurface {PlayerId}: circuit disconnected during JS cleanup", _resolvedPlayerId);
+        }
+        catch (OperationCanceledException ex)
+        {
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: JS call cancelled during JS cleanup", _resolvedPlayerId);
         }
         catch (InvalidOperationException ex)
         {
