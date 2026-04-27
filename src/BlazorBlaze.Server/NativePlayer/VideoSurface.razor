@@ -55,6 +55,22 @@ else
     [Parameter]
     public string? BackgroundColor { get; set; }
 
+    /// <summary>
+    /// Source-frame width/height that the AI inference operates on. When 0, falls back
+    /// to <see cref="Width"/>/<see cref="Height"/>. Native player uses this together
+    /// with <see cref="RoiX"/>..<see cref="RoiHeight"/> to position overlays.
+    /// </summary>
+    [Parameter] public int FrameWidth { get; set; }
+    [Parameter] public int FrameHeight { get; set; }
+
+    /// <summary>
+    /// AI ROI in source-frame coordinates. When all four are 0 the full frame is used.
+    /// </summary>
+    [Parameter] public int RoiX { get; set; }
+    [Parameter] public int RoiY { get; set; }
+    [Parameter] public int RoiWidth { get; set; }
+    [Parameter] public int RoiHeight { get; set; }
+
     protected override void OnInitialized()
     {
         _resolvedPlayerId = PlayerId ?? $"vs-{Interlocked.Increment(ref _nextId)}";
@@ -81,8 +97,14 @@ else
                 .Publish(new BackgroundColorChanged(BackgroundColor));
         }
 
+        var fw = FrameWidth > 0 ? FrameWidth : Width;
+        var fh = FrameHeight > 0 ? FrameHeight : Height;
+        var rw = RoiWidth  > 0 ? RoiWidth  : fw;
+        var rh = RoiHeight > 0 ? RoiHeight : fh;
+
         await EventAggregator.GetEvent<PlayerInitialized>().Publish(
-            new PlayerInitialized(_resolvedPlayerId, StreamUrl, rect.X, rect.Y, rect.Width, rect.Height));
+            new PlayerInitialized(_resolvedPlayerId, StreamUrl, rect.X, rect.Y, rect.Width, rect.Height,
+                                  fw, fh, RoiX, RoiY, rw, rh));
 
         await EventAggregator.GetEvent<PlayRequested>()
             .Publish(new PlayRequested(_resolvedPlayerId));
