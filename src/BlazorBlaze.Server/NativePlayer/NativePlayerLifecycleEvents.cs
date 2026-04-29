@@ -4,7 +4,7 @@ using ProtoBuf;
 namespace BlazorBlaze.Server.NativePlayer;
 
 [ProtoContract]
-[SubscriptionScope(SubscriptionScopeFlags.NativeCpp | SubscriptionScopeFlags.ServerSide)]
+[SubscriptionScope(SubscriptionScopeFlags.NativeCpp)]
 public record PlayerInitialized
 {
     [ProtoMember(1)] public string Id { get; init; } = "";
@@ -36,7 +36,7 @@ public record PlayerInitialized
 }
 
 [ProtoContract]
-[SubscriptionScope(SubscriptionScopeFlags.NativeCpp | SubscriptionScopeFlags.ServerSide)]
+[SubscriptionScope(SubscriptionScopeFlags.NativeCpp)]
 public record PlayerDestroyed
 {
     [ProtoMember(1)] public string Id { get; init; } = "";
@@ -47,7 +47,7 @@ public record PlayerDestroyed
 }
 
 [ProtoContract]
-[SubscriptionScope(SubscriptionScopeFlags.NativeCpp | SubscriptionScopeFlags.ServerSide)]
+[SubscriptionScope(SubscriptionScopeFlags.NativeCpp)]
 public record PlayRequested
 {
     [ProtoMember(1)] public string Id { get; init; } = "";
@@ -57,7 +57,7 @@ public record PlayRequested
 }
 
 [ProtoContract]
-[SubscriptionScope(SubscriptionScopeFlags.NativeCpp | SubscriptionScopeFlags.ServerSide)]
+[SubscriptionScope(SubscriptionScopeFlags.NativeCpp)]
 public record LayoutChanged
 {
     [ProtoMember(1)] public string Id { get; init; } = "";
@@ -72,7 +72,7 @@ public record LayoutChanged
 }
 
 [ProtoContract]
-[SubscriptionScope(SubscriptionScopeFlags.NativeCpp | SubscriptionScopeFlags.ServerSide)]
+[SubscriptionScope(SubscriptionScopeFlags.NativeCpp)]
 public record BackgroundColorChanged
 {
     [ProtoMember(1)] public string Color { get; init; } = "";
