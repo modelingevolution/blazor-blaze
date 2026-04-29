@@ -119,14 +119,28 @@ else
 
     public async ValueTask DisposeAsync()
     {
-        if (!KioskDetector.IsKiosk || _jsAdapter is null)
+        if (!KioskDetector.IsKiosk)
         {
             _selfRef?.Dispose();
             _selfRef = null;
             return;
         }
 
-        await EventAggregator.GetEvent<PlayerDestroyed>().Publish(new PlayerDestroyed(_resolvedPlayerId));
+        try
+        {
+            await EventAggregator.GetEvent<PlayerDestroyed>().Publish(new PlayerDestroyed(_resolvedPlayerId));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: PlayerDestroyed publish failed during dispose", _resolvedPlayerId);
+        }
+
+        if (_jsAdapter is null)
+        {
+            _selfRef?.Dispose();
+            _selfRef = null;
+            return;
+        }
 
         try
         {
