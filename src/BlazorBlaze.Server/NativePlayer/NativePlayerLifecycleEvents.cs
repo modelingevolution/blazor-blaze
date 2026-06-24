@@ -35,6 +35,26 @@ public record PlayerInitialized
     }
 }
 
+/// <summary>
+/// Server→native zoom/pan viewport state (design §5), serialized to wire type
+/// <c>viewport-changed</c>. Native applies it as one <c>cairo_matrix</c> over video + every overlay.
+/// <see cref="NPanX"/>/<see cref="NPanY"/> are NORMALIZED pan (nPanX = tx/clipW, nPanY = ty/clipH).
+/// Renderer-only — never re-emitted to the server.
+/// </summary>
+[ProtoContract]
+[SubscriptionScope(SubscriptionScopeFlags.NativeCpp)]
+public record ViewportChanged
+{
+    [ProtoMember(1)] public string Id { get; init; } = "";
+    [ProtoMember(2)] public double Scale { get; init; } = 1.0;
+    [ProtoMember(3)] public double NPanX { get; init; }
+    [ProtoMember(4)] public double NPanY { get; init; }
+
+    public ViewportChanged() { }
+    public ViewportChanged(string id, double scale, double nPanX, double nPanY)
+        => (Id, Scale, NPanX, NPanY) = (id, scale, nPanX, nPanY);
+}
+
 [ProtoContract]
 [SubscriptionScope(SubscriptionScopeFlags.NativeCpp)]
 public record PlayerDestroyed
