@@ -10,7 +10,6 @@ namespace BlazorBlaze.Server.Tests.NativePlayer;
 
 public sealed class VideoSurfacePreviewTests : BunitContext
 {
-    private readonly List<PlayerInitialized> _initializedEvents = [];
     private readonly List<ViewportChanged> _viewportEvents = [];
     private readonly BunitJSModuleInterop _moduleInterop;
     private readonly EventAggregator _ea = new(new NullForwarder(), new EventAggregatorPool());
@@ -25,12 +24,11 @@ public sealed class VideoSurfacePreviewTests : BunitContext
         _moduleInterop = JSInterop.SetupModule("./_content/BlazorBlaze.Server/video-surface.js");
         _moduleInterop.Mode = JSRuntimeMode.Loose;
 
-        _ea.GetEvent<PlayerInitialized>().Subscribe(e => _initializedEvents.Add(e));
         _ea.GetEvent<ViewportChanged>().Subscribe(e => _viewportEvents.Add(e));
     }
 
     [Fact]
-    public void Fill_KioskPlaceholder_IsAspectBoundAndFullWidth()
+    public void Fill_KioskPlaceholder_FitsInsideContainerBothAxes()
     {
         // Arrange & Act
         var cut = Render<VideoSurface>(p => p
@@ -39,10 +37,13 @@ public sealed class VideoSurfacePreviewTests : BunitContext
             .Add(vs => vs.FrameWidth, 1280)
             .Add(vs => vs.FrameHeight, 720));
 
-        // Assert
+        // Assert — fit-contain: aspect ratio preserved, capped in BOTH axes (review #6),
+        // with no unconditional full width that would overflow a constrained container.
         var style = cut.Find("div").GetAttribute("style") ?? "";
-        style.Should().Contain("width:100%");
         style.Should().Contain("aspect-ratio:1280 / 720");
+        style.Should().Contain("max-width:100%");
+        style.Should().Contain("max-height:100%");
+        style.Should().NotContain("; width:100%");
     }
 
     [Fact]
@@ -104,31 +105,6 @@ public sealed class VideoSurfacePreviewTests : BunitContext
         style.Should().Contain("width:1280px");
         style.Should().Contain("height:720px");
         style.Should().NotContain("aspect-ratio");
-    }
-
-    [Fact]
-    public void PlainVideo_True_CarriedOnPlayerInitialized()
-    {
-        // Arrange & Act
-        Render<VideoSurface>(p => p
-            .Add(vs => vs.StreamUrl, "http://localhost/stream")
-            .Add(vs => vs.PlainVideo, true));
-
-        // Assert
-        _initializedEvents.Should().ContainSingle();
-        _initializedEvents[0].PlainVideo.Should().BeTrue();
-    }
-
-    [Fact]
-    public void PlainVideo_DefaultsFalse_OnPlayerInitialized()
-    {
-        // Arrange & Act
-        Render<VideoSurface>(p =>
-            p.Add(vs => vs.StreamUrl, "http://localhost/stream"));
-
-        // Assert
-        _initializedEvents.Should().ContainSingle();
-        _initializedEvents[0].PlainVideo.Should().BeFalse();
     }
 
     [Fact]

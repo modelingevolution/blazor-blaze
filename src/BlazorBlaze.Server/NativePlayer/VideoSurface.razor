@@ -72,23 +72,17 @@ else
     [Parameter] public int RoiHeight { get; set; }
 
     /// <summary>
-    /// Plain-video / preview mode: the kiosk placeholder sizes to <c>width:100%</c> with an
-    /// aspect ratio of <see cref="FrameWidth"/>/<see cref="FrameHeight"/> instead of fixed pixels,
-    /// while still painting no opaque pixels and starting no browser poll (FR-6).
+    /// Fill mode: the kiosk placeholder fits inside its container in both axes while preserving the
+    /// <see cref="FrameWidth"/>/<see cref="FrameHeight"/> aspect ratio (fit-contain) instead of using
+    /// fixed pixels, while still painting no opaque pixels and starting no browser poll (FR-6).
     /// </summary>
     [Parameter] public bool Fill { get; set; }
-
-    /// <summary>
-    /// Marks this as a plain-video / preview player. Carried on <see cref="PlayerInitialized"/> so
-    /// the native bridge skips AI-overlay replay for it (FR-7).
-    /// </summary>
-    [Parameter] public bool PlainVideo { get; set; }
 
     private int ResolvedFrameWidth => FrameWidth > 0 ? FrameWidth : Width;
     private int ResolvedFrameHeight => FrameHeight > 0 ? FrameHeight : Height;
 
     private string PlaceholderSizeStyle => Fill
-        ? $"width:100%; aspect-ratio:{ResolvedFrameWidth} / {ResolvedFrameHeight};"
+        ? $"aspect-ratio:{ResolvedFrameWidth} / {ResolvedFrameHeight}; max-width:100%; max-height:100%;"
         : $"width:{Width}px; height:{Height}px;";
 
     protected override void OnInitialized()
@@ -124,7 +118,7 @@ else
 
         await EventAggregator.GetEvent<PlayerInitialized>().Publish(
             new PlayerInitialized(_resolvedPlayerId, StreamUrl, rect.X, rect.Y, rect.Width, rect.Height,
-                                  fw, fh, RoiX, RoiY, rw, rh, PlainVideo));
+                                  fw, fh, RoiX, RoiY, rw, rh));
 
         await EventAggregator.GetEvent<PlayRequested>()
             .Publish(new PlayRequested(_resolvedPlayerId));

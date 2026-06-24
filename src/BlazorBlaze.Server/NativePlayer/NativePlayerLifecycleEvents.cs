@@ -20,12 +20,6 @@ public record PlayerInitialized
     [ProtoMember(11)] public int RoiWidth { get; init; }
     [ProtoMember(12)] public int RoiHeight { get; init; }
 
-    /// <summary>
-    /// Marks a plain-video / preview player so the native bridge skips AI-overlay replay (FR-7).
-    /// Absent/false ⇒ the AI preview path replays as today.
-    /// </summary>
-    [ProtoMember(13)] public bool PlainVideo { get; init; }
-
     public PlayerInitialized() { }
 
     public PlayerInitialized(string id, string url, int x, int y, int width, int height)
@@ -33,13 +27,11 @@ public record PlayerInitialized
 
     public PlayerInitialized(string id, string url, int x, int y, int width, int height,
                              int frameWidth, int frameHeight,
-                             int roiX, int roiY, int roiWidth, int roiHeight,
-                             bool plainVideo = false)
+                             int roiX, int roiY, int roiWidth, int roiHeight)
     {
         Id = id; Url = url; X = x; Y = y; Width = width; Height = height;
         FrameWidth = frameWidth; FrameHeight = frameHeight;
         RoiX = roiX; RoiY = roiY; RoiWidth = roiWidth; RoiHeight = roiHeight;
-        PlainVideo = plainVideo;
     }
 }
 
