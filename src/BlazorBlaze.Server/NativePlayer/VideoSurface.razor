@@ -10,7 +10,7 @@
 @if (KioskDetector.IsKiosk)
 {
     <div @ref="_placeholderRef"
-         style="visibility:hidden; opacity:0; width:@(Width)px; height:@(Height)px; @Style">
+         style="visibility:hidden; opacity:0; @PlaceholderSizeStyle @Style">
     </div>
 }
 else
@@ -71,6 +71,26 @@ else
     [Parameter] public int RoiWidth { get; set; }
     [Parameter] public int RoiHeight { get; set; }
 
+    /// <summary>
+    /// Plain-video / preview mode: the kiosk placeholder sizes to <c>width:100%</c> with an
+    /// aspect ratio of <see cref="FrameWidth"/>/<see cref="FrameHeight"/> instead of fixed pixels,
+    /// while still painting no opaque pixels and starting no browser poll (FR-6).
+    /// </summary>
+    [Parameter] public bool Fill { get; set; }
+
+    /// <summary>
+    /// Marks this as a plain-video / preview player. Carried on <see cref="PlayerInitialized"/> so
+    /// the native bridge skips AI-overlay replay for it (FR-7).
+    /// </summary>
+    [Parameter] public bool PlainVideo { get; set; }
+
+    private int ResolvedFrameWidth => FrameWidth > 0 ? FrameWidth : Width;
+    private int ResolvedFrameHeight => FrameHeight > 0 ? FrameHeight : Height;
+
+    private string PlaceholderSizeStyle => Fill
+        ? $"width:100%; aspect-ratio:{ResolvedFrameWidth} / {ResolvedFrameHeight};"
+        : $"width:{Width}px; height:{Height}px;";
+
     protected override void OnInitialized()
     {
         _resolvedPlayerId = PlayerId ?? $"vs-{Interlocked.Increment(ref _nextId)}";
@@ -97,17 +117,32 @@ else
                 .Publish(new BackgroundColorChanged(BackgroundColor));
         }
 
-        var fw = FrameWidth > 0 ? FrameWidth : Width;
-        var fh = FrameHeight > 0 ? FrameHeight : Height;
+        var fw = ResolvedFrameWidth;
+        var fh = ResolvedFrameHeight;
         var rw = RoiWidth  > 0 ? RoiWidth  : fw;
         var rh = RoiHeight > 0 ? RoiHeight : fh;
 
         await EventAggregator.GetEvent<PlayerInitialized>().Publish(
             new PlayerInitialized(_resolvedPlayerId, StreamUrl, rect.X, rect.Y, rect.Width, rect.Height,
-                                  fw, fh, RoiX, RoiY, rw, rh));
+                                  fw, fh, RoiX, RoiY, rw, rh, PlainVideo));
 
         await EventAggregator.GetEvent<PlayRequested>()
             .Publish(new PlayRequested(_resolvedPlayerId));
+    }
+
+    /// <summary>
+    /// Publishes the current zoom/pan viewport state to the native player (design §5). The host owns
+    /// the <c>(scale, panX, panY)</c> state; this stamps the resolved player id and emits a
+    /// <see cref="ViewportChanged"/> event. Kiosk-only — in browser mode the host applies the transform
+    /// itself and there is no native consumer.
+    /// </summary>
+    public Task PublishViewportAsync(double scale, double panX, double panY)
+    {
+        if (!KioskDetector.IsKiosk)
+            return Task.CompletedTask;
+
+        return EventAggregator.GetEvent<ViewportChanged>()
+            .Publish(new ViewportChanged(_resolvedPlayerId, scale, panX, panY));
     }
 
     [JSInvokable]
