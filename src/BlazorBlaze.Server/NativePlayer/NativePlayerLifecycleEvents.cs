@@ -1,5 +1,4 @@
 using ModelingEvolution.EventAggregator;
-using ModelingEvolution.EventAggregator.Blazor;
 using ProtoBuf;
 
 namespace BlazorBlaze.Server.NativePlayer;
@@ -45,23 +44,23 @@ public record PlayerInitialized
 }
 
 /// <summary>
-/// Server→native zoom/pan viewport state (design §5). Native applies it as one
-/// <c>cairo_matrix</c> over video + every overlay via its <c>transform-changed</c> handler.
+/// Server→native zoom/pan viewport state (design §5), serialized to wire type
+/// <c>viewport-changed</c>. Native applies it as one <c>cairo_matrix</c> over video + every overlay.
+/// <see cref="NPanX"/>/<see cref="NPanY"/> are NORMALIZED pan (nPanX = tx/clipW, nPanY = ty/clipH).
 /// Renderer-only — never re-emitted to the server.
 /// </summary>
 [ProtoContract]
 [SubscriptionScope(SubscriptionScopeFlags.NativeCpp)]
-[NativeCppEventName("transform-changed")]
 public record ViewportChanged
 {
     [ProtoMember(1)] public string Id { get; init; } = "";
     [ProtoMember(2)] public double Scale { get; init; } = 1.0;
-    [ProtoMember(3)] public double PanX { get; init; }
-    [ProtoMember(4)] public double PanY { get; init; }
+    [ProtoMember(3)] public double NPanX { get; init; }
+    [ProtoMember(4)] public double NPanY { get; init; }
 
     public ViewportChanged() { }
-    public ViewportChanged(string id, double scale, double panX, double panY)
-        => (Id, Scale, PanX, PanY) = (id, scale, panX, panY);
+    public ViewportChanged(string id, double scale, double nPanX, double nPanY)
+        => (Id, Scale, NPanX, NPanY) = (id, scale, nPanX, nPanY);
 }
 
 [ProtoContract]

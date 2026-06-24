@@ -147,12 +147,12 @@ public sealed class VideoSurfacePreviewTests : BunitContext
         var evt = _viewportEvents[0];
         evt.Id.Should().Be("preview-1");
         evt.Scale.Should().Be(2.0);
-        evt.PanX.Should().Be(0.25);
-        evt.PanY.Should().Be(-0.5);
+        evt.NPanX.Should().Be(0.25);
+        evt.NPanY.Should().Be(-0.5);
     }
 
     [Fact]
-    public void ViewportChanged_WireTypeName_IsTransformChanged()
+    public void ViewportChanged_WireTypeName_IsViewportChanged()
     {
         // Arrange
         var registry = new NativeCppEventRegistry(Array.Empty<Type>());
@@ -160,8 +160,27 @@ public sealed class VideoSurfacePreviewTests : BunitContext
         // Act
         var name = registry.GetTypeName(typeof(ViewportChanged));
 
-        // Assert — native dispatches on this exact string (wire-contract.md §1).
-        name.Should().Be("transform-changed");
+        // Assert — native dispatches on this exact string (pinned wire contract).
+        name.Should().Be("viewport-changed");
+    }
+
+    [Fact]
+    public void ViewportChanged_WireFieldNames_MatchPinnedContract()
+    {
+        // Arrange — same camelCase policy NativeCppForwarder serializes with.
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        };
+
+        // Act
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            new ViewportChanged("preview-1", 2.0, 0.25, -0.5), options);
+
+        // Assert — { id, scale, nPanX, nPanY } per the pinned wire contract.
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var props = doc.RootElement.EnumerateObject().Select(p => p.Name);
+        props.Should().BeEquivalentTo("id", "scale", "nPanX", "nPanY");
     }
 }
 

@@ -132,17 +132,17 @@ else
 
     /// <summary>
     /// Publishes the current zoom/pan viewport state to the native player (design §5). The host owns
-    /// the <c>(scale, panX, panY)</c> state; this stamps the resolved player id and emits a
-    /// <see cref="ViewportChanged"/> event. Kiosk-only — in browser mode the host applies the transform
-    /// itself and there is no native consumer.
+    /// the <c>(scale, nPanX, nPanY)</c> state (nPanX/nPanY NORMALIZED: tx/clipW, ty/clipH); this stamps
+    /// the resolved player id and emits a <see cref="ViewportChanged"/> event. Kiosk-only — in browser
+    /// mode the host applies the transform itself and there is no native consumer.
     /// </summary>
-    public Task PublishViewportAsync(double scale, double panX, double panY)
+    public Task PublishViewportAsync(double scale, double nPanX, double nPanY)
     {
         if (!KioskDetector.IsKiosk)
             return Task.CompletedTask;
 
         return EventAggregator.GetEvent<ViewportChanged>()
-            .Publish(new ViewportChanged(_resolvedPlayerId, scale, panX, panY));
+            .Publish(new ViewportChanged(_resolvedPlayerId, scale, nPanX, nPanY));
     }
 
     [JSInvokable]
