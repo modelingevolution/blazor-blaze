@@ -15,6 +15,15 @@ import { send as bridgeSend, sendSessionBootstrap } from "./video-surface-bridge
 
 const _activeAdapters = new Set();
 
+// After the last observed change, keep re-measuring for this many animation frames before going
+// idle. The fullscreen-exit reflow settles over several frames, and on WebKitGTK (the kiosk
+// webview) the ResizeObserver/MutationObserver callbacks during that heavy relayout are
+// unreliable — the final settle is intermittently dropped, freezing the tracked rect at a
+// mid-settle size, so the native player composites the video too small. Polling until the rect
+// holds steady for SETTLE_FRAMES frames converges on the true final rect regardless of whether
+// the observer fired for it. ~12 frames ≈ 200ms; cheap (early-outs once stable).
+const SETTLE_FRAMES = 12;
+
 /**
  * Posts a message to the native WebKitGTK host via the bridge.
  * Retained as a named export for low-level C# interop callers; adapter
@@ -41,6 +50,7 @@ class NativePlayerAdapter {
     #resizeObserver;
     #mutationObserver;
     #rafPending = false;
+    #stableFrames = 0;
     #lastRect = { x: 0, y: 0, width: 0, height: 0 };
     #disposed = false;
 
@@ -106,33 +116,46 @@ class NativePlayerAdapter {
     }
 
     #schedulePositionUpdate() {
+        if (this.#disposed) return;
+        // A fresh observer event means layout is (re)settling — restart the convergence window
+        // so we keep watching past this change until the rect holds steady.
+        this.#stableFrames = 0;
+        this.#ensureRaf();
+    }
+
+    #ensureRaf() {
         if (this.#rafPending || this.#disposed) return;
         this.#rafPending = true;
         requestAnimationFrame(() => {
             this.#rafPending = false;
-            this.#checkPosition();
+            if (this.#disposed) return;
+            const changed = this.#checkPosition();
+            this.#stableFrames = changed ? 0 : this.#stableFrames + 1;
+            if (this.#stableFrames < SETTLE_FRAMES) this.#ensureRaf();
         });
     }
 
+    // Returns true when the rect changed and an update was dispatched.
     #checkPosition() {
-        if (this.#disposed) return;
+        if (this.#disposed) return false;
 
         const rect = this.#computeRect();
         if (rect.x === this.#lastRect.x &&
             rect.y === this.#lastRect.y &&
             rect.width === this.#lastRect.width &&
             rect.height === this.#lastRect.height) {
-            return;
+            return false;
         }
 
         this.#lastRect = rect;
         const ref = this.#dotnetRef;
-        if (!ref) return;
+        if (!ref) return false;
         try {
             ref.invokeMethodAsync("OnRectChanged", rect.x, rect.y, rect.width, rect.height);
         } catch (e) {
             console.warn('[video-surface] OnRectChanged invocation failed:', e);
         }
+        return true;
     }
 
     #computeRect() {
