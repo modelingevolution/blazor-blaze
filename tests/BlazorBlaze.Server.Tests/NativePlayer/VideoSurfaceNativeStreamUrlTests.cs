@@ -105,4 +105,22 @@ public sealed class VideoSurfaceNativeStreamUrlTests : BunitContext
         _initializedEvents.Should().ContainSingle();
         _initializedEvents[0].Url.Should().Be("http://host:5001/mjpeg");
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void KioskMode_FallsBackToStreamUrl_WhenNativeStreamUrlEmptyOrWhitespace(string nativeStreamUrl)
+    {
+        // Arrange
+        SetupKiosk(true);
+
+        // Act
+        Render<VideoSurface>(p => p
+            .Add(vs => vs.StreamUrl, "http://host:5001/mjpeg")
+            .Add(vs => vs.NativeStreamUrl, nativeStreamUrl));
+
+        // Assert
+        _initializedEvents.Should().ContainSingle();
+        _initializedEvents[0].Url.Should().Be("http://host:5001/mjpeg");
+    }
 }

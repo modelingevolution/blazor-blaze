@@ -125,8 +125,10 @@ else
         var rw = RoiWidth  > 0 ? RoiWidth  : fw;
         var rh = RoiHeight > 0 ? RoiHeight : fh;
 
+        var nativeUrl = string.IsNullOrWhiteSpace(NativeStreamUrl) ? StreamUrl : NativeStreamUrl;
+
         await EventAggregator.GetEvent<PlayerInitialized>().Publish(
-            new PlayerInitialized(_resolvedPlayerId, NativeStreamUrl ?? StreamUrl, rect.X, rect.Y, rect.Width, rect.Height,
+            new PlayerInitialized(_resolvedPlayerId, nativeUrl, rect.X, rect.Y, rect.Width, rect.Height,
                                   fw, fh, RoiX, RoiY, rw, rh));
 
         await EventAggregator.GetEvent<PlayRequested>()
