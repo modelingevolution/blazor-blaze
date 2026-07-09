@@ -10,6 +10,7 @@ namespace BlazorBlaze.Server.Tests.NativePlayer;
 public sealed class VideoSurfaceNativeStreamUrlTests : BunitContext
 {
     private readonly List<PlayerInitialized> _initializedEvents = [];
+    private readonly List<PlayRequested> _playRequestedEvents = [];
     private readonly EventAggregator _ea = new(new NullForwarder(), new EventAggregatorPool());
 
     private void SetupKiosk(bool isKiosk)
@@ -26,6 +27,7 @@ public sealed class VideoSurfaceNativeStreamUrlTests : BunitContext
         }
 
         _ea.GetEvent<PlayerInitialized>().Subscribe(e => _initializedEvents.Add(e));
+        _ea.GetEvent<PlayRequested>().Subscribe(e => _playRequestedEvents.Add(e));
     }
 
     [Fact]
@@ -122,5 +124,26 @@ public sealed class VideoSurfaceNativeStreamUrlTests : BunitContext
         // Assert
         _initializedEvents.Should().ContainSingle();
         _initializedEvents[0].Url.Should().Be("http://host:5001/mjpeg");
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData(null, "")]
+    [InlineData("", null)]
+    [InlineData("", "")]
+    [InlineData("   ", "   ")]
+    public void KioskMode_DoesNotPublishPlayerInitialized_WhenBothUrlsBlank(string? nativeStreamUrl, string? streamUrl)
+    {
+        // Arrange
+        SetupKiosk(true);
+
+        // Act
+        Render<VideoSurface>(p => p
+            .Add(vs => vs.StreamUrl, streamUrl!)
+            .Add(vs => vs.NativeStreamUrl, nativeStreamUrl));
+
+        // Assert
+        _initializedEvents.Should().BeEmpty();
+        _playRequestedEvents.Should().BeEmpty();
     }
 }

@@ -127,6 +127,14 @@ else
 
         var nativeUrl = string.IsNullOrWhiteSpace(NativeStreamUrl) ? StreamUrl : NativeStreamUrl;
 
+        if (string.IsNullOrWhiteSpace(nativeUrl))
+        {
+            Logger.LogDebug(
+                "VideoSurface {PlayerId}: skipping PlayerInitialized — no valid source (NativeStreamUrl and StreamUrl both blank); keeping existing player source",
+                _resolvedPlayerId);
+            return;
+        }
+
         await EventAggregator.GetEvent<PlayerInitialized>().Publish(
             new PlayerInitialized(_resolvedPlayerId, nativeUrl, rect.X, rect.Y, rect.Width, rect.Height,
                                   fw, fh, RoiX, RoiY, rw, rh));
