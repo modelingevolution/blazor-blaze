@@ -47,6 +47,39 @@ public sealed class VideoSurfaceNativeStreamUrlTests : BunitContext
     }
 
     [Fact]
+    public void KioskMode_PublishesMjpegFallback_WhenNativeStreamUrlIsShm()
+    {
+        // Arrange
+        SetupKiosk(true);
+
+        // Act
+        Render<VideoSurface>(p => p
+            .Add(vs => vs.StreamUrl, "http://host:5001/mjpeg")
+            .Add(vs => vs.NativeStreamUrl, "shm://cam0"));
+
+        // Assert
+        _initializedEvents.Should().ContainSingle();
+        _initializedEvents[0].Url.Should().Be("shm://cam0");
+        _initializedEvents[0].StreamUrl.Should().Be("http://host:5001/mjpeg");
+    }
+
+    [Fact]
+    public void KioskMode_NoFallback_WhenNativeStreamUrlUnset()
+    {
+        // Arrange
+        SetupKiosk(true);
+
+        // Act
+        Render<VideoSurface>(p => p
+            .Add(vs => vs.StreamUrl, "http://host:5001/mjpeg"));
+
+        // Assert
+        _initializedEvents.Should().ContainSingle();
+        _initializedEvents[0].Url.Should().Be("http://host:5001/mjpeg");
+        _initializedEvents[0].StreamUrl.Should().BeNull();
+    }
+
+    [Fact]
     public void KioskMode_DoesNotRenderBrowserImg_WhenNativeStreamUrlSet()
     {
         // Arrange

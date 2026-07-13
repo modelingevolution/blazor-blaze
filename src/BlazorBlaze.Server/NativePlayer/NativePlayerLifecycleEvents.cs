@@ -20,6 +20,13 @@ public record PlayerInitialized
     [ProtoMember(11)] public int RoiWidth { get; init; }
     [ProtoMember(12)] public int RoiHeight { get; init; }
 
+    /// <summary>
+    /// MJPEG fallback URL for when <see cref="Url"/> is a host-local shm source that a remote
+    /// native-player kiosk cannot resolve. Serialized as wire field <c>streamUrl</c>. Null/omitted
+    /// when <see cref="Url"/> is already the MJPEG URL.
+    /// </summary>
+    [ProtoMember(13)] public string? StreamUrl { get; init; }
+
     public PlayerInitialized() { }
 
     public PlayerInitialized(string id, string url, int x, int y, int width, int height)
@@ -27,11 +34,13 @@ public record PlayerInitialized
 
     public PlayerInitialized(string id, string url, int x, int y, int width, int height,
                              int frameWidth, int frameHeight,
-                             int roiX, int roiY, int roiWidth, int roiHeight)
+                             int roiX, int roiY, int roiWidth, int roiHeight,
+                             string? streamUrl = null)
     {
         Id = id; Url = url; X = x; Y = y; Width = width; Height = height;
         FrameWidth = frameWidth; FrameHeight = frameHeight;
         RoiX = roiX; RoiY = roiY; RoiWidth = roiWidth; RoiHeight = roiHeight;
+        StreamUrl = streamUrl;
     }
 }
 

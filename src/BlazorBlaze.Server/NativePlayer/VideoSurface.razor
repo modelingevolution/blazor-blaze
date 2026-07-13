@@ -32,8 +32,10 @@ else
 
     /// <summary>
     /// Optional native-player source address (e.g. <c>shm://cam0</c>) for the kiosk path only.
-    /// When set, the kiosk <see cref="PlayerInitialized"/> publishes this instead of <see cref="StreamUrl"/>;
-    /// the browser <c>&lt;img&gt;</c> always uses <see cref="StreamUrl"/> and is never given this address (FR-12).
+    /// When set, the kiosk <see cref="PlayerInitialized"/> publishes this instead of <see cref="StreamUrl"/>
+    /// as the primary URL, and also carries <see cref="StreamUrl"/> as its MJPEG fallback (a remote kiosk
+    /// cannot resolve a host-local shm source, so it can fall back to MJPEG); the browser <c>&lt;img&gt;</c>
+    /// always uses <see cref="StreamUrl"/> and is never given this address (FR-12).
     /// When null the kiosk path falls back to <see cref="StreamUrl"/>, byte-for-byte today's behavior (FR-14).
     /// </summary>
     [Parameter]
@@ -125,7 +127,8 @@ else
         var rw = RoiWidth  > 0 ? RoiWidth  : fw;
         var rh = RoiHeight > 0 ? RoiHeight : fh;
 
-        var nativeUrl = string.IsNullOrWhiteSpace(NativeStreamUrl) ? StreamUrl : NativeStreamUrl;
+        var usingNativeStreamUrl = !string.IsNullOrWhiteSpace(NativeStreamUrl);
+        var nativeUrl = usingNativeStreamUrl ? NativeStreamUrl! : StreamUrl;
 
         if (string.IsNullOrWhiteSpace(nativeUrl))
         {
@@ -135,9 +138,11 @@ else
             return;
         }
 
+        var fallbackUrl = usingNativeStreamUrl && !string.IsNullOrWhiteSpace(StreamUrl) ? StreamUrl : null;
+
         await EventAggregator.GetEvent<PlayerInitialized>().Publish(
             new PlayerInitialized(_resolvedPlayerId, nativeUrl, rect.X, rect.Y, rect.Width, rect.Height,
-                                  fw, fh, RoiX, RoiY, rw, rh));
+                                  fw, fh, RoiX, RoiY, rw, rh, fallbackUrl));
 
         await EventAggregator.GetEvent<PlayRequested>()
             .Publish(new PlayRequested(_resolvedPlayerId));
