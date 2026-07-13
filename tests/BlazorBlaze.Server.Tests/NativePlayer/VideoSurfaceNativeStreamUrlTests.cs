@@ -3,6 +3,8 @@ using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using ModelingEvolution.EventAggregator;
 using NSubstitute;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using EventAggregator = ModelingEvolution.EventAggregator.EventAggregator;
 
 namespace BlazorBlaze.Server.Tests.NativePlayer;
@@ -178,5 +180,41 @@ public sealed class VideoSurfaceNativeStreamUrlTests : BunitContext
         // Assert
         _initializedEvents.Should().BeEmpty();
         _playRequestedEvents.Should().BeEmpty();
+    }
+
+    // Same camelCase + null-omitting policy NativeCppForwarder serializes with (pinned wire contract).
+    private static readonly JsonSerializerOptions WireJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    [Fact]
+    public void PlayerInitialized_WireJson_ContainsStreamUrl_WhenFallbackSet()
+    {
+        // Arrange
+        var evt = new PlayerInitialized("id-1", "shm://cam0", 0, 0, 1920, 1080,
+            1920, 1080, 0, 0, 1920, 1080, "http://host:5001/mjpeg");
+
+        // Act
+        var json = JsonSerializer.Serialize(evt, WireJsonOptions);
+
+        // Assert — native-player parses these exact keys (jp.get_string("streamUrl"), jp.get_string("url")).
+        json.Should().Contain("\"url\":\"shm://cam0\"");
+        json.Should().Contain("\"streamUrl\":\"http://host:5001/mjpeg\"");
+    }
+
+    [Fact]
+    public void PlayerInitialized_WireJson_OmitsStreamUrlKey_WhenFallbackNull()
+    {
+        // Arrange
+        var evt = new PlayerInitialized("id-1", "http://host:5001/mjpeg", 0, 0, 1920, 1080,
+            1920, 1080, 0, 0, 1920, 1080);
+
+        // Act
+        var json = JsonSerializer.Serialize(evt, WireJsonOptions);
+
+        // Assert — key is absent, not present as "streamUrl":null.
+        json.Should().NotContain("streamUrl");
     }
 }
