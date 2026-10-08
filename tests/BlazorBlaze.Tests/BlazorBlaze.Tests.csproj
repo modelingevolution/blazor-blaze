@@ -20,10 +20,13 @@
     </PackageReference>
     <PackageReference Include="bunit" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+    <!-- BlazorBlaze pulls the published package transitively; the tests must exercise the in-repo Patched source instead -->
+    <PackageReference Include="ModelingEvolution.SkiaSharp.Views.Blazor" ExcludeAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\BlazorBlaze\BlazorBlaze.csproj" />
+    <ProjectReference Include="..\..\extern\SkiaSharp.Views.Blazor.Patched\SkiaSharp.Views.Blazor.Patched.csproj" />
   </ItemGroup>
 
   <ItemGroup>

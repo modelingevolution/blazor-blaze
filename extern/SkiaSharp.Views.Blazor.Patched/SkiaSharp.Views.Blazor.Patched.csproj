@@ -15,6 +15,10 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Must match the path hardcoded in SKHtmlCanvasInterop.cs, DpiWatcherInterop.cs, SizeWatcherInterop.cs -->
     <StaticWebAssetBasePath>_content/ModelingEvolution.SkiaSharp.Views.Blazor</StaticWebAssetBasePath>
+    <!-- Above the official SkiaSharp.Views.Blazor assembly version: both ship SkiaSharp.Views.Blazor.dll, and when the
+         official package also arrives transitively the SDK keeps the higher assembly version. -->
+    <AssemblyVersion>3.119.1.0</AssemblyVersion>
+    <FileVersion>3.119.1.1</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

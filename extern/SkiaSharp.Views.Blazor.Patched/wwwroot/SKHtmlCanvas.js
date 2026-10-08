@@ -28,8 +28,8 @@ export class SKHtmlCanvas {
     static deinit(elementId) {
         if (!elementId)
             return;
-        const element = SKHtmlCanvas.elements.get(elementId);
-        const removed = SKHtmlCanvas.elements.delete(elementId);
+        const element = SKHtmlCanvas.elements?.get(elementId);
+        const removed = SKHtmlCanvas.elements?.delete(elementId);
         const htmlCanvas = element;
         if (!htmlCanvas || !htmlCanvas.SKHtmlCanvas)
             return;
@@ -37,19 +37,19 @@ export class SKHtmlCanvas {
         htmlCanvas.SKHtmlCanvas = undefined;
     }
     static requestAnimationFrame(elementId, renderLoop, width, height) {
-        const htmlCanvas = SKHtmlCanvas.elements.get(elementId);
+        const htmlCanvas = SKHtmlCanvas.elements?.get(elementId);
         if (!htmlCanvas || !htmlCanvas.SKHtmlCanvas)
             return;
         htmlCanvas.SKHtmlCanvas.requestAnimationFrame(renderLoop, width, height);
     }
     static setEnableRenderLoop(elementId, enable) {
-        const htmlCanvas = SKHtmlCanvas.elements.get(elementId);
+        const htmlCanvas = SKHtmlCanvas.elements?.get(elementId);
         if (!htmlCanvas || !htmlCanvas.SKHtmlCanvas)
             return;
         htmlCanvas.SKHtmlCanvas.setEnableRenderLoop(enable);
     }
     static putImageData(elementId, pData, width, height) {
-        const htmlCanvas = SKHtmlCanvas.elements.get(elementId);
+        const htmlCanvas = SKHtmlCanvas.elements?.get(elementId);
         if (!htmlCanvas || !htmlCanvas.SKHtmlCanvas)
             return;
         htmlCanvas.SKHtmlCanvas.putImageData(pData, width, height);
@@ -57,6 +57,9 @@ export class SKHtmlCanvas {
     constructor(useGL, element, callback) {
         this.renderLoopEnabled = false;
         this.renderLoopRequest = 0;
+        this.frameInFlight = false;
+        this.framePending = false;
+        this.pendingSize = undefined;
         this.htmlCanvas = element;
         this.renderFrameCallback = callback;
         if (useGL) {
@@ -81,12 +84,21 @@ export class SKHtmlCanvas {
         }
     }
     deinit() {
+        this.framePending = false;
+        this.pendingSize = undefined;
         this.setEnableRenderLoop(false);
     }
     requestAnimationFrame(renderLoop, width, height) {
         // optionally update the render loop
         if (renderLoop !== undefined && this.renderLoopEnabled !== renderLoop)
             this.setEnableRenderLoop(renderLoop);
+        // resizing clears the canvas and the frame in flight would put its old size back, so defer to after it
+        if (this.frameInFlight) {
+            this.framePending = true;
+            if (width && height)
+                this.pendingSize = { width, height };
+            return;
+        }
         // make sure the canvas is scaled correctly for the drawing
         if (width && height) {
             this.htmlCanvas.width = width;
@@ -97,21 +109,30 @@ export class SKHtmlCanvas {
             return;
         // add the draw to the next frame
         this.renderLoopRequest = window.requestAnimationFrame(async () => {
-            if (this.glInfo) {
-                // make current
-                const GL = SKHtmlCanvas.getGL();
-                GL.makeContextCurrent(this.glInfo.context);
+            this.frameInFlight = true;
+            try {
+                if (this.glInfo) {
+                    // make current
+                    const GL = SKHtmlCanvas.getGL();
+                    GL.makeContextCurrent(this.glInfo.context);
+                }
+                // Handle both DotNetObjectReference (has invokeMethodAsync) and function proxy
+                if (this.renderFrameCallback.invokeMethodAsync) {
+                    await this.renderFrameCallback.invokeMethodAsync('Invoke');
+                } else if (typeof this.renderFrameCallback === 'function') {
+                    await Promise.resolve(this.renderFrameCallback());
+                }
+            } finally {
+                this.frameInFlight = false;
+                this.renderLoopRequest = 0;
+                const pending = this.framePending;
+                const size = this.pendingSize;
+                this.framePending = false;
+                this.pendingSize = undefined;
+                // we may want to draw the next frame
+                if (pending || this.renderLoopEnabled)
+                    this.requestAnimationFrame(undefined, size?.width, size?.height);
             }
-            // Handle both DotNetObjectReference (has invokeMethodAsync) and function proxy
-            if (this.renderFrameCallback.invokeMethodAsync) {
-                await this.renderFrameCallback.invokeMethodAsync('Invoke');
-            } else if (typeof this.renderFrameCallback === 'function') {
-                await Promise.resolve(this.renderFrameCallback());
-            }
-            this.renderLoopRequest = 0;
-            // we may want to draw the next frame
-            if (this.renderLoopEnabled)
-                this.requestAnimationFrame();
         });
     }
     setEnableRenderLoop(enable) {
@@ -142,7 +163,7 @@ export class SKHtmlCanvas {
         // so we must copy the data when WASM threading is enabled.
         const Module = SKHtmlCanvas.getModule();
         var source = new Uint8ClampedArray(Module.HEAPU8.buffer, pData, width * height * 4);
-        var buffer = (Module.HEAPU8.buffer instanceof SharedArrayBuffer)
+        var buffer = (typeof SharedArrayBuffer !== 'undefined' && Module.HEAPU8.buffer instanceof SharedArrayBuffer)
             ? new Uint8ClampedArray(source)  // copy out of SharedArrayBuffer
             : source;
         var imageData = new ImageData(buffer, width, height);

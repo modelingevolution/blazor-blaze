@@ -24,6 +24,7 @@ namespace SkiaSharp.Views.Blazor.Internal
 		public void Dispose()
 		{
 			OnDisposingModule();
+			_ = module?.DisposeAsync();
 		}
 
 		protected IJSObjectReference Module =>

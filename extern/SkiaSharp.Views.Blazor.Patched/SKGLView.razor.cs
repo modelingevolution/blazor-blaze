@@ -11,10 +11,11 @@ namespace SkiaSharp.Views.Blazor
 	[SupportedOSPlatform("browser")]
 	public partial class SKGLView : IDisposable
 	{
-		private SKHtmlCanvasInterop interop = null!;
-		private SizeWatcherInterop sizeWatcher = null!;
-		private DpiWatcherInterop dpiWatcher = null!;
-		private SKHtmlCanvasInterop.GLInfo jsGLInfo = null!;
+		private SKHtmlCanvasInterop? interop;
+		private SizeWatcherInterop? sizeWatcher;
+		private DpiWatcherInterop? dpiWatcher;
+		private SKHtmlCanvasInterop.GLInfo? jsGLInfo;
+		private bool disposed;
 		private ElementReference htmlCanvas;
 
 		private const int ResourceCacheBytes = 256 * 1024 * 1024; // 256 MB
@@ -73,28 +74,42 @@ namespace SkiaSharp.Views.Blazor
 
 		protected override async Task OnAfterRenderAsync(bool firstRender)
 		{
-			if (firstRender)
-			{
-				interop = await SKHtmlCanvasInterop.ImportAsync(JS, htmlCanvas, OnRenderFrame);
-				jsGLInfo = await interop.InitGLAsync();
+			if (!firstRender)
+				return;
 
-				sizeWatcher = await SizeWatcherInterop.ImportAsync(JS, htmlCanvas, OnSizeChanged);
-				dpiWatcher = await DpiWatcherInterop.ImportAsync(JS, OnDpiChanged);
+			interop = await SKHtmlCanvasInterop.ImportAsync(JS, htmlCanvas, OnRenderFrame);
+			if (!disposed)
+				jsGLInfo = await interop.InitGLAsync();
+			if (disposed || jsGLInfo == null)
+			{
+				ReleaseInterop();
+				return;
 			}
+
+			sizeWatcher = await SizeWatcherInterop.ImportAsync(JS, htmlCanvas, OnSizeChanged);
+			if (disposed)
+			{
+				ReleaseInterop();
+				return;
+			}
+
+			dpiWatcher = await DpiWatcherInterop.ImportAsync(JS, OnDpiChanged);
+			if (disposed)
+				ReleaseInterop();
 		}
 
 		public void Invalidate()
 		{
-			if (canvasSize.Width <= 0 || canvasSize.Height <= 0 || dpi <= 0 || jsGLInfo == null)
+			if (canvasSize.Width <= 0 || canvasSize.Height <= 0 || dpi <= 0 || jsGLInfo == null || interop == null)
 				return;
 
 			_ = interop.RequestAnimationFrameAsync(EnableRenderLoop, (int)(canvasSize.Width * dpi), (int)(canvasSize.Height * dpi));
 		}
 
-		private void OnRenderFrame()
+		private Task OnRenderFrame()
 		{
-			if (canvasSize.Width <= 0 || canvasSize.Height <= 0 || dpi <= 0 || jsGLInfo == null)
-				return;
+			if (canvasSize.Width <= 0 || canvasSize.Height <= 0 || dpi <= 0 || jsGLInfo == null || interop == null)
+				return Task.CompletedTask;
 
 			// create the SkiaSharp context
 			if (context == null)
@@ -152,6 +167,7 @@ namespace SkiaSharp.Views.Blazor
 			// update the control
 			canvas?.Flush();
 			context.Flush();
+			return Task.CompletedTask;
 		}
 
 		private void OnDpiChanged(double newDpi)
@@ -187,11 +203,20 @@ namespace SkiaSharp.Views.Blazor
 			}
 		}
 
+		private void ReleaseInterop()
+		{
+			dpiWatcher?.Unsubscribe(OnDpiChanged);
+			dpiWatcher = null;
+			sizeWatcher?.Dispose();
+			sizeWatcher = null;
+			interop?.Dispose();
+			interop = null;
+		}
+
 		public void Dispose()
 		{
-			dpiWatcher.Unsubscribe(OnDpiChanged);
-			sizeWatcher.Dispose();
-			interop.Dispose();
+			disposed = true;
+			ReleaseInterop();
 		}
 	}
 }

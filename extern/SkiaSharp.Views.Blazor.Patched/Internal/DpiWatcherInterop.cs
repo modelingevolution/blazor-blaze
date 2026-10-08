@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using System.Threading.Tasks;
 using Microsoft.JSInterop;
@@ -14,7 +15,7 @@ namespace SkiaSharp.Views.Blazor.Internal
 		private const string StopSymbol = "DpiWatcher.stop";
 		private const string GetDpiSymbol = "DpiWatcher.getDpi";
 
-		private static DpiWatcherInterop? instance;
+		private static readonly ConditionalWeakTable<IJSRuntime, DpiWatcherInterop> instances = new();
 
 		private event Action<double>? callbacksEvent;
 		private readonly FloatFloatActionHelper callbackHelper;
@@ -31,7 +32,7 @@ namespace SkiaSharp.Views.Blazor.Internal
 		}
 
 		public static DpiWatcherInterop Get(IJSRuntime js) =>
-			instance ??= new DpiWatcherInterop(js);
+			instances.GetValue(js, static runtime => new DpiWatcherInterop(runtime));
 
 		private DpiWatcherInterop(IJSRuntime js)
 			: base(js, ModuleName, JsFilename)
