@@ -121,3 +121,20 @@ test('a resize requested while a frame is in flight is applied and drawn after t
     assert.equal(element.height, 20);
     assert.equal(frames.length, 1);
 });
+
+test('deinit during an in-flight frame drops the pending request', async () => {
+    const frames = animationFrames();
+    let finishFrame;
+    const view = new SKHtmlCanvas(false, { width: 0, height: 0 }, {
+        invokeMethodAsync: () => new Promise(resolve => finishFrame = resolve)
+    });
+
+    view.requestAnimationFrame(false, 10, 10);
+    const inFlight = frames.shift()();
+    view.requestAnimationFrame(false, 20, 20);
+    view.deinit();
+    finishFrame();
+    await inFlight;
+
+    assert.equal(frames.length, 0);
+});
