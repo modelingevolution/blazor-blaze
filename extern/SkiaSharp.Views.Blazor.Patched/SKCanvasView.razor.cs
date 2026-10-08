@@ -97,9 +97,10 @@ namespace SkiaSharp.Views.Blazor
 			_ = interop.RequestAnimationFrameAsync(EnableRenderLoop, (int)(canvasSize.Width * dpi), (int)(canvasSize.Height * dpi));
 		}
 
-		private void OnRenderFrame()
+		private async Task OnRenderFrame()
 		{
-			if (canvasSize.Width <= 0 || canvasSize.Height <= 0 || dpi <= 0 || interop == null)
+			var canvasInterop = interop;
+			if (canvasSize.Width <= 0 || canvasSize.Height <= 0 || dpi <= 0 || canvasInterop == null)
 				return;
 
 			var info = CreateBitmap(out var unscaledSize);
@@ -117,7 +118,7 @@ namespace SkiaSharp.Views.Blazor
 				OnPaintSurface?.Invoke(new SKPaintSurfaceEventArgs(surface, info.WithSize(userVisibleSize), info));
 			}
 
-			_ = interop.PutImageDataAsync(pixelsHandle.AddrOfPinnedObject(), info.Size);
+			await canvasInterop.PutImageDataAsync(pixelsHandle.AddrOfPinnedObject(), info.Size);
 		}
 
 		private SKImageInfo CreateBitmap(out SKSizeI unscaledSize)

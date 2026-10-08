@@ -8,18 +8,14 @@ namespace SkiaSharp.Views.Blazor.Internal
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	public class ActionHelper
 	{
-		private readonly Action action;
+		private readonly Func<Task> action;
 
-		public ActionHelper(Action action)
+		public ActionHelper(Func<Task> action)
 		{
 			this.action = action;
 		}
 
 		[JSInvokable]
-		public Task Invoke()
-		{
-			action?.Invoke();
-			return Task.CompletedTask;
-		}
+		public Task Invoke() => action();
 	}
 }

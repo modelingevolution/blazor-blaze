@@ -97,18 +97,21 @@ export class SKHtmlCanvas {
             return;
         // add the draw to the next frame
         this.renderLoopRequest = window.requestAnimationFrame(async () => {
-            if (this.glInfo) {
-                // make current
-                const GL = SKHtmlCanvas.getGL();
-                GL.makeContextCurrent(this.glInfo.context);
+            try {
+                if (this.glInfo) {
+                    // make current
+                    const GL = SKHtmlCanvas.getGL();
+                    GL.makeContextCurrent(this.glInfo.context);
+                }
+                // Handle both DotNetObjectReference (has invokeMethodAsync) and function proxy
+                if (this.renderFrameCallback.invokeMethodAsync) {
+                    await this.renderFrameCallback.invokeMethodAsync('Invoke');
+                } else if (typeof this.renderFrameCallback === 'function') {
+                    await Promise.resolve(this.renderFrameCallback());
+                }
+            } finally {
+                this.renderLoopRequest = 0;
             }
-            // Handle both DotNetObjectReference (has invokeMethodAsync) and function proxy
-            if (this.renderFrameCallback.invokeMethodAsync) {
-                await this.renderFrameCallback.invokeMethodAsync('Invoke');
-            } else if (typeof this.renderFrameCallback === 'function') {
-                await Promise.resolve(this.renderFrameCallback());
-            }
-            this.renderLoopRequest = 0;
             // we may want to draw the next frame
             if (this.renderLoopEnabled)
                 this.requestAnimationFrame();
@@ -142,7 +145,7 @@ export class SKHtmlCanvas {
         // so we must copy the data when WASM threading is enabled.
         const Module = SKHtmlCanvas.getModule();
         var source = new Uint8ClampedArray(Module.HEAPU8.buffer, pData, width * height * 4);
-        var buffer = (Module.HEAPU8.buffer instanceof SharedArrayBuffer)
+        var buffer = (typeof SharedArrayBuffer !== 'undefined' && Module.HEAPU8.buffer instanceof SharedArrayBuffer)
             ? new Uint8ClampedArray(source)  // copy out of SharedArrayBuffer
             : source;
         var imageData = new ImageData(buffer, width, height);

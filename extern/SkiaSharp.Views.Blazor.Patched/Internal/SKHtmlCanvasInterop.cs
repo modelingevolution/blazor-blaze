@@ -23,14 +23,14 @@ namespace SkiaSharp.Views.Blazor.Internal
 
 		private DotNetObjectReference<ActionHelper>? callbackReference;
 
-		public static async Task<SKHtmlCanvasInterop> ImportAsync(IJSRuntime js, ElementReference element, Action callback)
+		public static async Task<SKHtmlCanvasInterop> ImportAsync(IJSRuntime js, ElementReference element, Func<Task> callback)
 		{
 			var interop = new SKHtmlCanvasInterop(js, element, callback);
 			await interop.ImportAsync();
 			return interop;
 		}
 
-		public SKHtmlCanvasInterop(IJSRuntime js, ElementReference element, Action renderFrameCallback)
+		public SKHtmlCanvasInterop(IJSRuntime js, ElementReference element, Func<Task> renderFrameCallback)
 			: base(js, ModuleName, JsFilename)
 		{
 			htmlCanvas = element;

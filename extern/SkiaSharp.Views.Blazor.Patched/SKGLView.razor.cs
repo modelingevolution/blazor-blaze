@@ -106,10 +106,10 @@ namespace SkiaSharp.Views.Blazor
 			_ = interop.RequestAnimationFrameAsync(EnableRenderLoop, (int)(canvasSize.Width * dpi), (int)(canvasSize.Height * dpi));
 		}
 
-		private void OnRenderFrame()
+		private Task OnRenderFrame()
 		{
 			if (canvasSize.Width <= 0 || canvasSize.Height <= 0 || dpi <= 0 || jsGLInfo == null || interop == null)
-				return;
+				return Task.CompletedTask;
 
 			// create the SkiaSharp context
 			if (context == null)
@@ -167,6 +167,7 @@ namespace SkiaSharp.Views.Blazor
 			// update the control
 			canvas?.Flush();
 			context.Flush();
+			return Task.CompletedTask;
 		}
 
 		private void OnDpiChanged(double newDpi)
