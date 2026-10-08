@@ -12,9 +12,10 @@ namespace SkiaSharp.Views.Blazor
 	[SupportedOSPlatform("browser")]
 	public partial class SKCanvasView : IDisposable
 	{
-		private SKHtmlCanvasInterop interop = null!;
-		private SizeWatcherInterop sizeWatcher = null!;
-		private DpiWatcherInterop dpiWatcher = null!;
+		private SKHtmlCanvasInterop? interop;
+		private SizeWatcherInterop? sizeWatcher;
+		private DpiWatcherInterop? dpiWatcher;
+		private bool disposed;
 		private ElementReference htmlCanvas;
 
 		private SKSizeI pixelSize;
@@ -66,19 +67,31 @@ namespace SkiaSharp.Views.Blazor
 
 		protected override async Task OnAfterRenderAsync(bool firstRender)
 		{
-			if (firstRender)
-			{
-				interop = await SKHtmlCanvasInterop.ImportAsync(JS, htmlCanvas, OnRenderFrame);
-				await interop.InitRasterAsync();
+			if (!firstRender)
+				return;
 
-				sizeWatcher = await SizeWatcherInterop.ImportAsync(JS, htmlCanvas, OnSizeChanged);
-				dpiWatcher = await DpiWatcherInterop.ImportAsync(JS, OnDpiChanged);
+			interop = await SKHtmlCanvasInterop.ImportAsync(JS, htmlCanvas, OnRenderFrame);
+			if (disposed || !await interop.InitRasterAsync() || disposed)
+			{
+				ReleaseInterop();
+				return;
 			}
+
+			sizeWatcher = await SizeWatcherInterop.ImportAsync(JS, htmlCanvas, OnSizeChanged);
+			if (disposed)
+			{
+				ReleaseInterop();
+				return;
+			}
+
+			dpiWatcher = await DpiWatcherInterop.ImportAsync(JS, OnDpiChanged);
+			if (disposed)
+				ReleaseInterop();
 		}
 
 		public void Invalidate()
 		{
-			if (canvasSize.Width <= 0 || canvasSize.Height <= 0 || dpi <= 0)
+			if (canvasSize.Width <= 0 || canvasSize.Height <= 0 || dpi <= 0 || interop == null)
 				return;
 
 			_ = interop.RequestAnimationFrameAsync(EnableRenderLoop, (int)(canvasSize.Width * dpi), (int)(canvasSize.Height * dpi));
@@ -86,7 +99,7 @@ namespace SkiaSharp.Views.Blazor
 
 		private void OnRenderFrame()
 		{
-			if (canvasSize.Width <= 0 || canvasSize.Height <= 0 || dpi <= 0)
+			if (canvasSize.Width <= 0 || canvasSize.Height <= 0 || dpi <= 0 || interop == null)
 				return;
 
 			var info = CreateBitmap(out var unscaledSize);
@@ -168,11 +181,20 @@ namespace SkiaSharp.Views.Blazor
 			Invalidate();
 		}
 
-		public void Dispose()
+		private void ReleaseInterop()
 		{
 			dpiWatcher?.Unsubscribe(OnDpiChanged);
+			dpiWatcher = null;
 			sizeWatcher?.Dispose();
+			sizeWatcher = null;
 			interop?.Dispose();
+			interop = null;
+		}
+
+		public void Dispose()
+		{
+			disposed = true;
+			ReleaseInterop();
 
 			FreeBitmap();
 		}
