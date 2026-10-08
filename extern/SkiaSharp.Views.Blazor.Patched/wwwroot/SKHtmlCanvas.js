@@ -57,6 +57,9 @@ export class SKHtmlCanvas {
     constructor(useGL, element, callback) {
         this.renderLoopEnabled = false;
         this.renderLoopRequest = 0;
+        this.frameInFlight = false;
+        this.framePending = false;
+        this.pendingSize = undefined;
         this.htmlCanvas = element;
         this.renderFrameCallback = callback;
         if (useGL) {
@@ -81,12 +84,21 @@ export class SKHtmlCanvas {
         }
     }
     deinit() {
+        this.framePending = false;
+        this.pendingSize = undefined;
         this.setEnableRenderLoop(false);
     }
     requestAnimationFrame(renderLoop, width, height) {
         // optionally update the render loop
         if (renderLoop !== undefined && this.renderLoopEnabled !== renderLoop)
             this.setEnableRenderLoop(renderLoop);
+        // resizing clears the canvas and the frame in flight would put its old size back, so defer to after it
+        if (this.frameInFlight) {
+            this.framePending = true;
+            if (width && height)
+                this.pendingSize = { width, height };
+            return;
+        }
         // make sure the canvas is scaled correctly for the drawing
         if (width && height) {
             this.htmlCanvas.width = width;
@@ -97,6 +109,7 @@ export class SKHtmlCanvas {
             return;
         // add the draw to the next frame
         this.renderLoopRequest = window.requestAnimationFrame(async () => {
+            this.frameInFlight = true;
             try {
                 if (this.glInfo) {
                     // make current
@@ -110,11 +123,16 @@ export class SKHtmlCanvas {
                     await Promise.resolve(this.renderFrameCallback());
                 }
             } finally {
+                this.frameInFlight = false;
                 this.renderLoopRequest = 0;
+                const pending = this.framePending;
+                const size = this.pendingSize;
+                this.framePending = false;
+                this.pendingSize = undefined;
+                // we may want to draw the next frame
+                if (pending || this.renderLoopEnabled)
+                    this.requestAnimationFrame(undefined, size?.width, size?.height);
             }
-            // we may want to draw the next frame
-            if (this.renderLoopEnabled)
-                this.requestAnimationFrame();
         });
     }
     setEnableRenderLoop(enable) {

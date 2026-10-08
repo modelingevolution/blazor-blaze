@@ -1,11 +1,14 @@
+using System.ComponentModel;
 using System.Diagnostics;
 
 namespace BlazorBlaze.Tests.SkiaViews;
 
 public sealed class SKHtmlCanvasJsTests
 {
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
+
     [Fact]
-    public void SKHtmlCanvasJs_NodeTestSuite_Passes()
+    public async Task SKHtmlCanvasJs_NodeTestSuite_Passes()
     {
         var script = Path.Combine(RepositoryRoot(), "tests", "BlazorBlaze.Tests", "SkiaViews", "js", "SKHtmlCanvas.test.mjs");
         var start = new ProcessStartInfo("node", ["--test", script])
@@ -14,13 +17,28 @@ public sealed class SKHtmlCanvasJsTests
             RedirectStandardError = true
         };
 
-        using var node = Process.Start(start)
-            ?? throw new InvalidOperationException("Node.js is required to run the SKHtmlCanvas.js tests.");
+        using var node = StartNode(start);
         var output = node.StandardOutput.ReadToEndAsync();
         var error = node.StandardError.ReadToEndAsync();
-        node.WaitForExit();
+        var finished = node.WaitForExit(Timeout);
+        if (!finished)
+            node.Kill(entireProcessTree: true);
+        var log = await output + await error;
 
-        node.ExitCode.Should().Be(0, $"{output.Result}{error.Result}");
+        finished.Should().BeTrue($"node --test must finish within {Timeout.TotalSeconds} s.{Environment.NewLine}{log}");
+        node.ExitCode.Should().Be(0, log);
+    }
+
+    private static Process StartNode(ProcessStartInfo start)
+    {
+        try
+        {
+            return Process.Start(start)!;
+        }
+        catch (Win32Exception ex)
+        {
+            throw new InvalidOperationException("Node.js is required to run the SKHtmlCanvas.js tests.", ex);
+        }
     }
 
     private static string RepositoryRoot()

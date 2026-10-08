@@ -54,15 +54,19 @@ test('putImageData copies the pixels out of a SharedArrayBuffer-backed heap', ()
     assert.ok(!(drawn[0].data.buffer instanceof SharedArrayBuffer));
 });
 
-test('a render frame whose callback fails does not block later frames', async () => {
+function animationFrames() {
     const frames = [];
     globalThis.window = {
         requestAnimationFrame: callback => frames.push(callback),
         cancelAnimationFrame: () => { }
     };
-    const element = { width: 0, height: 0 };
+    return frames;
+}
+
+test('a one-shot frame whose callback fails does not block the next requested frame', async () => {
+    const frames = animationFrames();
     let calls = 0;
-    const view = new SKHtmlCanvas(false, element, {
+    const view = new SKHtmlCanvas(false, { width: 0, height: 0 }, {
         invokeMethodAsync: async () => {
             calls++;
             if (calls === 1)
@@ -76,4 +80,44 @@ test('a render frame whose callback fails does not block later frames', async ()
     await frames.shift()();
 
     assert.equal(calls, 2);
+});
+
+test('the render loop queues the next frame after a frame fails', async () => {
+    const frames = animationFrames();
+    let calls = 0;
+    const view = new SKHtmlCanvas(false, { width: 0, height: 0 }, {
+        invokeMethodAsync: async () => {
+            calls++;
+            if (calls === 1)
+                throw new Error('frame failed');
+        }
+    });
+
+    view.requestAnimationFrame(true, 0, 0);
+    await assert.rejects(frames.shift()(), /frame failed/);
+
+    assert.equal(frames.length, 1);
+    await frames.shift()();
+    assert.equal(calls, 2);
+});
+
+test('a resize requested while a frame is in flight is applied and drawn after that frame', async () => {
+    const frames = animationFrames();
+    const element = { width: 0, height: 0 };
+    let finishFrame;
+    const view = new SKHtmlCanvas(false, element, {
+        invokeMethodAsync: () => new Promise(resolve => finishFrame = resolve)
+    });
+
+    view.requestAnimationFrame(false, 10, 10);
+    const inFlight = frames.shift()();
+    view.requestAnimationFrame(false, 20, 20);
+    assert.equal(element.width, 10, 'the frame in flight keeps its canvas until it is put');
+    element.width = 10;
+    finishFrame();
+    await inFlight;
+
+    assert.equal(element.width, 20);
+    assert.equal(element.height, 20);
+    assert.equal(frames.length, 1);
 });
