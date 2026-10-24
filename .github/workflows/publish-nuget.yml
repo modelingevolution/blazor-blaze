@@ -8,6 +8,9 @@ on:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # Trusted Publishing: lets NuGet/login mint a 1-hour key
 
     steps:
     - uses: actions/checkout@v4
@@ -44,11 +47,18 @@ jobs:
         dotnet pack src/BlazorBlaze.Server/BlazorBlaze.Server.csproj -c Release --no-build -o ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
         dotnet pack src/BlazorBlaze.Scene3D/BlazorBlaze.Scene3D.csproj -c Release --no-build -o ./nupkgs -p:PackageVersion=${{ steps.version.outputs.VERSION }}
 
+    - name: NuGet login (OIDC -> temporary API key)
+      # nuget.org Trusted Publishing: no long-lived key. The policy on nuget.org names this repo and this workflow
+      # file; `user` is the nuget.org username of the POLICY CREATOR (not the package owner / org).
+      id: nuget_login
+      uses: NuGet/login@v1
+      with:
+        user: rafal.maciag
     - name: Push to NuGet.org
       run: |
         for pkg in ./nupkgs/*.nupkg; do
           echo "Pushing $pkg..."
-          dotnet nuget push "$pkg" --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate || echo "WARNING: Failed to push $pkg"
+          dotnet nuget push "$pkg" --api-key ${{ steps.nuget_login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate || echo "WARNING: Failed to push $pkg"
         done
 
     - name: Publish to ModelingEvolution NuGet
