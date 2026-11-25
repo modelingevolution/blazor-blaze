@@ -19,56 +19,56 @@ public sealed class KioskDetectorTests
     }
 
     [Fact]
-    public void IsKiosk_ReturnsTrue_WhenUserAgentContainsToken()
+    public void IsNativePlayer_ReturnsTrue_WhenUserAgentContainsToken()
     {
         var detector = CreateDetector("Mozilla/5.0 RocketWelder-Kiosk/1.0");
 
-        detector.IsKiosk.Should().BeTrue();
+        detector.IsNativePlayer.Should().BeTrue();
     }
 
     [Fact]
-    public void IsKiosk_ReturnsFalse_WhenUserAgentDoesNotContainToken()
+    public void IsNativePlayer_ReturnsFalse_WhenUserAgentDoesNotContainToken()
     {
         var detector = CreateDetector("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 
-        detector.IsKiosk.Should().BeFalse();
+        detector.IsNativePlayer.Should().BeFalse();
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    public void IsKiosk_ReturnsFalse_WhenUserAgentIsNullOrEmpty(string? userAgent)
+    public void IsNativePlayer_ReturnsFalse_WhenUserAgentIsNullOrEmpty(string? userAgent)
     {
         var detector = CreateDetector(userAgent);
 
-        detector.IsKiosk.Should().BeFalse();
+        detector.IsNativePlayer.Should().BeFalse();
     }
 
     [Theory]
     [InlineData("Mozilla/5.0 ROCKETWELDER-KIOSK/1.0")]
     [InlineData("Mozilla/5.0 rocketwelder-kiosk/1.0")]
     [InlineData("Mozilla/5.0 RocketWelder-kiosk/1.0")]
-    public void IsKiosk_IsCaseInsensitive(string userAgent)
+    public void IsNativePlayer_IsCaseInsensitive(string userAgent)
     {
         var detector = CreateDetector(userAgent);
 
-        detector.IsKiosk.Should().BeTrue();
+        detector.IsNativePlayer.Should().BeTrue();
     }
 
     [Fact]
-    public void IsKiosk_IsSynchronousProperty()
+    public void IsNativePlayer_IsSynchronousProperty()
     {
         var detector = CreateDetector("Mozilla/5.0 RocketWelder-Kiosk/1.0");
 
-        var result1 = detector.IsKiosk;
-        var result2 = detector.IsKiosk;
+        var result1 = detector.IsNativePlayer;
+        var result2 = detector.IsNativePlayer;
 
         result1.Should().Be(result2);
         result1.Should().BeTrue();
     }
 
     [Fact]
-    public void IsKiosk_ValueIsCached_DoesNotReReadHeaders()
+    public void IsNativePlayer_ValueIsCached_DoesNotReReadHeaders()
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Headers["User-Agent"] = "Mozilla/5.0 RocketWelder-Kiosk/1.0";
@@ -78,9 +78,9 @@ public sealed class KioskDetectorTests
 
         var detector = new KioskDetector(accessor);
 
-        detector.IsKiosk.Should().BeTrue();
+        detector.IsNativePlayer.Should().BeTrue();
 
         accessor.HttpContext.Returns((HttpContext?)null);
-        detector.IsKiosk.Should().BeTrue();
+        detector.IsNativePlayer.Should().BeTrue();
     }
 }

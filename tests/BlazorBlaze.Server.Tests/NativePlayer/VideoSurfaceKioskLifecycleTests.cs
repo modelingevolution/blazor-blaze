@@ -20,7 +20,7 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
     public VideoSurfaceKioskLifecycleTests()
     {
         var kioskDetector = Substitute.For<IKioskDetector>();
-        kioskDetector.IsKiosk.Returns(true);
+        kioskDetector.IsNativePlayer.Returns(true);
         Services.AddSingleton(kioskDetector);
         Services.AddSingleton<IEventAggregator>(_ea);
 
@@ -124,7 +124,7 @@ public sealed class VideoSurfaceKioskLifecycleTests : BunitContext
     {
         var ctx = new BunitContext();
         var kioskDetector = Substitute.For<IKioskDetector>();
-        kioskDetector.IsKiosk.Returns(true);
+        kioskDetector.IsNativePlayer.Returns(true);
         ctx.Services.AddSingleton(kioskDetector);
         ctx.Services.AddEventAggregator();
 

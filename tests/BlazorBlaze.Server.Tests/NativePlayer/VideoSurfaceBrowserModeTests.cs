@@ -14,7 +14,7 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
     public VideoSurfaceBrowserModeTests()
     {
         var kioskDetector = Substitute.For<IKioskDetector>();
-        kioskDetector.IsKiosk.Returns(false);
+        kioskDetector.IsNativePlayer.Returns(false);
         Services.AddSingleton(kioskDetector);
         Services.AddSingleton<IEventAggregator>(_ea);
     }

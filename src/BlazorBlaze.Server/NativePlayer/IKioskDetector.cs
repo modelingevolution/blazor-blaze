@@ -9,5 +9,5 @@ public interface IKioskDetector
     /// <summary>
     /// True when User-Agent contains the kiosk token.
     /// </summary>
-    bool IsKiosk { get; }
+    bool IsNativePlayer { get; }
 }

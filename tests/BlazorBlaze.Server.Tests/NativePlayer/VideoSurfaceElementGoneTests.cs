@@ -36,7 +36,7 @@ public sealed class VideoSurfaceElementGoneTests : BunitContext
     public VideoSurfaceElementGoneTests()
     {
         var kioskDetector = Substitute.For<IKioskDetector>();
-        kioskDetector.IsKiosk.Returns(true);
+        kioskDetector.IsNativePlayer.Returns(true);
         Services.AddSingleton(kioskDetector);
         Services.AddSingleton<IEventAggregator>(_ea);
         Services.AddSingleton<ILogger<VideoSurface>>(_log);
@@ -140,6 +140,56 @@ public sealed class VideoSurfaceElementGoneTests : BunitContext
         _log.Levels.Count(l => l == LogLevel.Warning).Should().Be(1);
     }
 
+    // The exact message the circuit threw at Pamet, 2026-11-25 (bug-075 § Second variant).
+    private const string CircuitDisconnectedError =
+        "JavaScript interop calls cannot be issued at this time. This is because the circuit has disconnected and is being disposed.";
+
+    [Fact]
+    public void OnAfterRenderAsync_CircuitDisconnectedDuringCreate_ComponentStopsQuietly()
+    {
+        // bug-075 second variant: the circuit started closing while the surface created its adapter.
+        _createAdapter.Throw(new JSDisconnectedException(CircuitDisconnectedError));
+
+        Render<VideoSurface>(p => p
+            .Add(vs => vs.StreamUrl, "http://localhost/stream")
+            .Add(vs => vs.PlayerId, "run-screen"));
+
+        Renderer.UnhandledException.IsCompleted.Should().BeFalse(
+            "a disconnected circuit must not turn into an unhandled exception of the surface");
+        _moduleInterop.Invocations.Should().Contain(i => i.Identifier == "createAdapter", "anchor: the call was made");
+        _initializedEvents.Should().BeEmpty();
+    }
+
+    public static TheoryData<string> DisposeFailures => new() { "JSException", "JSDisconnectedException" };
+
+    [Theory]
+    [MemberData(nameof(DisposeFailures))]
+    public async Task DisposeAsync_AdapterDisposeThrows_StopsQuietlyAndStillReleasesReferences(string failure)
+    {
+        // bug-075 second variant: the adapter's JS dispose fails (the element or the circuit is gone). Nothing may
+        // escape DisposeAsync — the renderer reports it like an OnAfterRenderAsync failure — and the references are
+        // still released.
+        Exception error = failure == "JSException"
+            ? new JSException(BrowserNullElementError)
+            : new JSDisconnectedException(CircuitDisconnectedError);
+        var adapter = Substitute.For<IJSObjectReference>();
+        adapter.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>("dispose", Arg.Any<object?[]?>())
+            .Returns(_ => ValueTask.FromException<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(error));
+        adapter.DisposeAsync().Returns(_ => ValueTask.FromException(error));
+        _createAdapter.Return(adapter);
+        Render<VideoSurface>(p => p
+            .Add(vs => vs.StreamUrl, "http://localhost/stream")
+            .Add(vs => vs.PlayerId, "run-screen"));
+        _initializedEvents.Should().ContainSingle("anchor: the adapter exists");
+
+        var act = async () => await DisposeComponentsAsync();
+
+        await act.Should().NotThrowAsync();
+        Renderer.UnhandledException.IsCompleted.Should().BeFalse();
+        adapter.ReceivedCalls().Should().Contain(c => c.GetArguments().FirstOrDefault() as string == "dispose");
+        _published.Should().EndWith("destroyed");
+    }
+
     [Fact]
     public async Task DisposeAsync_WhileGetRectIsPending_ReleasesAdapterAndPublishesNothingAfterDestroyed()
     {
@@ -187,7 +237,7 @@ public sealed class VideoSurfaceElementGoneTests : BunitContext
         // because the import must be answered by a handler the test controls, not by SetupModule.
         await using var ctx = new BunitContext();
         var kioskDetector = Substitute.For<IKioskDetector>();
-        kioskDetector.IsKiosk.Returns(true);
+        kioskDetector.IsNativePlayer.Returns(true);
         ctx.Services.AddSingleton(kioskDetector);
         ctx.Services.AddSingleton<IEventAggregator>(new EventAggregator(new NullForwarder(), new EventAggregatorPool()));
         ctx.JSInterop.Mode = JSRuntimeMode.Loose;

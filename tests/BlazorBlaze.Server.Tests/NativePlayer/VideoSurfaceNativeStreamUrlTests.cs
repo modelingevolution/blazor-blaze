@@ -15,14 +15,14 @@ public sealed class VideoSurfaceNativeStreamUrlTests : BunitContext
     private readonly List<PlayRequested> _playRequestedEvents = [];
     private readonly EventAggregator _ea = new(new NullForwarder(), new EventAggregatorPool());
 
-    private void SetupKiosk(bool isKiosk)
+    private void SetupKiosk(bool isNativePlayer)
     {
         var kioskDetector = Substitute.For<IKioskDetector>();
-        kioskDetector.IsKiosk.Returns(isKiosk);
+        kioskDetector.IsNativePlayer.Returns(isNativePlayer);
         Services.AddSingleton(kioskDetector);
         Services.AddSingleton<IEventAggregator>(_ea);
 
-        if (isKiosk)
+        if (isNativePlayer)
         {
             var moduleInterop = JSInterop.SetupModule("./_content/BlazorBlaze.Server/video-surface.js");
             moduleInterop.Mode = JSRuntimeMode.Loose;

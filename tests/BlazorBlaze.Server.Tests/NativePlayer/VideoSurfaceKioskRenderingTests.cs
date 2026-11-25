@@ -12,7 +12,7 @@ public sealed class VideoSurfaceKioskRenderingTests : BunitContext
     public VideoSurfaceKioskRenderingTests()
     {
         var kioskDetector = Substitute.For<IKioskDetector>();
-        kioskDetector.IsKiosk.Returns(true);
+        kioskDetector.IsNativePlayer.Returns(true);
         Services.AddSingleton(kioskDetector);
         Services.AddSingleton<IEventAggregator>(new EventAggregator(new NullForwarder(), new EventAggregatorPool()));
 
