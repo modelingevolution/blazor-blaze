@@ -1,5 +1,7 @@
 using BlazorBlaze.Server.NativePlayer;
 using Bunit;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
@@ -14,7 +16,9 @@ namespace BlazorBlaze.Server.Tests.NativePlayer;
 /// <c>VideoSurface.OnAfterRenderAsync</c> called <c>createAdapter</c>. The browser threw
 /// "Cannot read properties of null (reading 'getBoundingClientRect')", the exception escaped
 /// <c>OnAfterRenderAsync</c>, and Blazor Server killed the circuit (red bar). A video surface must survive
-/// a failed or element-less adapter creation and try again on the next render.
+/// a failed or element-less adapter creation and try again on ITS OWN next render. A parent re-render with unchanged
+/// parameters does not re-render the surface, so it is no retry (pinned below); a removed surface is disposed and the
+/// replacing instance creates its adapter on its first render.
 /// </summary>
 public sealed class VideoSurfaceElementGoneTests : BunitContext
 {
@@ -23,6 +27,7 @@ public sealed class VideoSurfaceElementGoneTests : BunitContext
         "Cannot read properties of null (reading 'getBoundingClientRect')";
 
     private readonly List<PlayerInitialized> _initializedEvents = [];
+    private readonly List<string> _published = [];
     private readonly BunitJSModuleInterop _moduleInterop;
     private readonly CreateAdapterHandler _createAdapter = new();
     private readonly CapturingLogger _log = new();
@@ -40,11 +45,13 @@ public sealed class VideoSurfaceElementGoneTests : BunitContext
         _moduleInterop.Mode = JSRuntimeMode.Loose;
         _moduleInterop.AddInvocationHandler(_createAdapter);
 
-        _ea.GetEvent<PlayerInitialized>().Subscribe(e => _initializedEvents.Add(e));
+        _ea.GetEvent<PlayerInitialized>().Subscribe(e => { _initializedEvents.Add(e); _published.Add("init"); });
+        _ea.GetEvent<PlayRequested>().Subscribe(_ => _published.Add("play"));
+        _ea.GetEvent<PlayerDestroyed>().Subscribe(_ => _published.Add("destroyed"));
     }
 
     [Fact]
-    public void OnAfterRenderAsync_CreateAdapterThrowsBecauseElementIsGone_ComponentSurvivesAndRetriesOnNextRender()
+    public void OnAfterRenderAsync_CreateAdapterThrowsBecauseElementIsGone_ComponentSurvivesAndRetriesOnItsOwnNextRender()
     {
         _createAdapter.Throw(new JSException(BrowserNullElementError));
 
@@ -57,7 +64,8 @@ public sealed class VideoSurfaceElementGoneTests : BunitContext
             "a JS interop failure in a video surface must never kill the page");
         _initializedEvents.Should().BeEmpty();
 
-        // The element is back: the browser now creates the adapter.
+        // The element is back: the browser now creates the adapter. cut.Render() is the surface's OWN re-render;
+        // see ParentRerender_* for what a parent render does.
         _createAdapter.Return(Substitute.For<IJSObjectReference>());
 
         cut.Render();
@@ -68,7 +76,7 @@ public sealed class VideoSurfaceElementGoneTests : BunitContext
     }
 
     [Fact]
-    public void OnAfterRenderAsync_CreateAdapterReturnsNoAdapterForMissingElement_ComponentSurvivesAndRetriesOnNextRender()
+    public void OnAfterRenderAsync_CreateAdapterReturnsNoAdapterForMissingElement_ComponentSurvivesAndRetriesOnItsOwnNextRender()
     {
         // The fixed video-surface.js returns null (no adapter) for a null or detached element.
         _createAdapter.Return(null);
@@ -133,6 +141,102 @@ public sealed class VideoSurfaceElementGoneTests : BunitContext
     }
 
     [Fact]
+    public async Task DisposeAsync_WhileGetRectIsPending_ReleasesAdapterAndPublishesNothingAfterDestroyed()
+    {
+        // PR #26 review F1 (reviewer probe adopted): STOP removes the surface during the getRect round trip.
+        var rect = new TaskCompletionSource<PlayerRect>();
+        var adapter = Substitute.For<IJSObjectReference>();
+        adapter.InvokeAsync<PlayerRect>("getRect", Arg.Any<object?[]?>()).Returns(new ValueTask<PlayerRect>(rect.Task));
+        _createAdapter.Return(adapter);
+
+        Render<VideoSurface>(p => p
+            .Add(vs => vs.StreamUrl, "http://localhost/stream")
+            .Add(vs => vs.PlayerId, "run-screen"));
+        await DisposeComponentsAsync();
+        await Renderer.Dispatcher.InvokeAsync(() => rect.SetResult(new PlayerRect()));
+        await WaitUntil(() => Disposed(adapter));
+
+        adapter.ReceivedCalls().Should().Contain(c => c.GetArguments().FirstOrDefault() as string == "dispose",
+            "the JS adapter keeps html.np-video set (page see-through, bug 590) until it is disposed");
+        adapter.ReceivedCalls().Should().Contain(c => c.GetMethodInfo().Name == "DisposeAsync",
+            "the adapter reference must be released");
+        _published.Should().Equal(["destroyed"], "nothing may be published for a player after PlayerDestroyed");
+    }
+
+    [Fact]
+    public async Task DisposeAsync_WhileCreateAdapterIsPending_ReleasesAdapterAndPublishesNothingAfterDestroyed()
+    {
+        // The case the first round handled; kept as a control next to the getRect and import cases.
+        var adapter = Substitute.For<IJSObjectReference>();
+
+        Render<VideoSurface>(p => p
+            .Add(vs => vs.StreamUrl, "http://localhost/stream")
+            .Add(vs => vs.PlayerId, "run-screen"));
+        await DisposeComponentsAsync();
+        await Renderer.Dispatcher.InvokeAsync(() => _createAdapter.Return(adapter));
+        await WaitUntil(() => Disposed(adapter));
+
+        adapter.ReceivedCalls().Should().Contain(c => c.GetArguments().FirstOrDefault() as string == "dispose");
+        _published.Should().Equal(["destroyed"]);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_WhileModuleImportIsPending_ReleasesModuleAndCreatesNoAdapter()
+    {
+        // PR #26 review F3: the import is still in flight when STOP removes the surface. A separate context,
+        // because the import must be answered by a handler the test controls, not by SetupModule.
+        await using var ctx = new BunitContext();
+        var kioskDetector = Substitute.For<IKioskDetector>();
+        kioskDetector.IsKiosk.Returns(true);
+        ctx.Services.AddSingleton(kioskDetector);
+        ctx.Services.AddSingleton<IEventAggregator>(new EventAggregator(new NullForwarder(), new EventAggregatorPool()));
+        ctx.JSInterop.Mode = JSRuntimeMode.Loose;
+        var import = new ImportHandler();
+        ctx.JSInterop.AddInvocationHandler(import);
+        var module = Substitute.For<IJSObjectReference>();
+
+        ctx.Render<VideoSurface>(p => p.Add(vs => vs.StreamUrl, "http://localhost/stream"));
+        import.Invocations.Should().ContainSingle("the import must be pending when the surface is disposed");
+        await ctx.DisposeComponentsAsync();
+        await ctx.Renderer.Dispatcher.InvokeAsync(() => import.Return(module));
+        await WaitUntil(() => module.ReceivedCalls().Any());
+
+        module.ReceivedCalls().Should().Contain(c => c.GetMethodInfo().Name == "DisposeAsync",
+            "the module reference must be released");
+        module.ReceivedCalls().Should().NotContain(c => c.GetArguments().FirstOrDefault() as string == "createAdapter");
+    }
+
+    [Fact]
+    public async Task ParentRerender_SameParametersAfterFailedCreate_DoesNotRetry()
+    {
+        // PR #26 review F2/F4: pins what is true. Blazor skips a child whose primitive parameters did not change,
+        // so a parent re-render is not a retry. (In rw2 a STOP that removes the surface disposes it, and the
+        // instance that replaces it creates its adapter on its first render.)
+        _createAdapter.Throw(new JSException(BrowserNullElementError));
+        var parent = Render<Parent>();
+        _createAdapter.Return(Substitute.For<IJSObjectReference>());
+
+        await parent.Instance.RerenderAsync();
+        await parent.Instance.RerenderAsync();
+
+        _moduleInterop.Invocations.Count(i => i.Identifier == "createAdapter").Should().Be(1);
+        _initializedEvents.Should().BeEmpty("the slot stays blank until the surface itself renders again");
+    }
+
+    [Fact]
+    public async Task ParentRerender_ChangedParameterAfterFailedCreate_RetriesCreateAdapter()
+    {
+        _createAdapter.Throw(new JSException(BrowserNullElementError));
+        var parent = Render<Parent>();
+        _createAdapter.Return(Substitute.For<IJSObjectReference>());
+
+        await parent.Instance.RerenderAsync(frameWidth: 1280);
+
+        _moduleInterop.Invocations.Count(i => i.Identifier == "createAdapter").Should().Be(2);
+        _initializedEvents.Should().ContainSingle(e => e.Id == "run-screen");
+    }
+
+    [Fact]
     public void CreateAdapterNullResult_BlazorWireFormat_DeserializesToNoAdapter()
     {
         // The fixed createAdapter returns null for a missing element. blazor.server.js sends a null object
@@ -156,6 +260,49 @@ public sealed class VideoSurfaceElementGoneTests : BunitContext
 
         protected override void EndInvokeDotNet(Microsoft.JSInterop.Infrastructure.DotNetInvocationInfo invocationInfo,
             in Microsoft.JSInterop.Infrastructure.DotNetInvocationResult invocationResult) => throw new NotSupportedException();
+    }
+
+    private static bool Disposed(IJSObjectReference reference) =>
+        reference.ReceivedCalls().Any(c => c.GetMethodInfo().Name == "DisposeAsync");
+
+    // The continuation after a completed JS call runs after the dispatcher call returns. Wait for the call the
+    // assertion needs (it is also the liveness anchor of the "nothing published" assertions); the deadline turns
+    // "never happened" into a failing assertion instead of a hang.
+    private static async Task WaitUntil(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!condition() && DateTime.UtcNow < deadline)
+            await Task.Delay(10);
+    }
+
+    /// <summary>A parent like rw2's CameraPreview: primitive parameters only.</summary>
+    private sealed class Parent : ComponentBase
+    {
+        private int _frameWidth = 1920;
+        private int _renders;
+
+        public Task RerenderAsync(int? frameWidth = null) => InvokeAsync(() =>
+        {
+            _frameWidth = frameWidth ?? _frameWidth;
+            _renders++;
+            StateHasChanged();
+        });
+
+        protected override void BuildRenderTree(RenderTreeBuilder builder)
+        {
+            builder.AddContent(0, _renders);
+            builder.OpenComponent<VideoSurface>(1);
+            builder.AddAttribute(2, nameof(VideoSurface.StreamUrl), "http://localhost/stream");
+            builder.AddAttribute(3, nameof(VideoSurface.PlayerId), "run-screen");
+            builder.AddAttribute(4, nameof(VideoSurface.FrameWidth), _frameWidth);
+            builder.CloseComponent();
+        }
+    }
+
+    private sealed class ImportHandler()
+        : JSRuntimeInvocationHandlerBase<IJSObjectReference>(i => i.Identifier == "import", isCatchAllHandler: false)
+    {
+        public void Return(IJSObjectReference module) => SetResultBase(module);
     }
 
     private sealed class CapturingLogger : ILogger<VideoSurface>

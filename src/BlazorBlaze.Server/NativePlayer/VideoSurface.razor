@@ -106,8 +106,10 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Bug 075: every render until an adapter exists, not only the first. A render whose placeholder element
-        // was gone (STATION STOP swapped the run screen) created no adapter; the next render is the retry.
+        // Bug 075: every render of THIS component until an adapter exists, not only the first. A failed or
+        // element-less creation is retried on the surface's own next render (a parameter change); a parent render
+        // with unchanged parameters does not re-render it. A surface whose element is gone is in practice being
+        // removed: it is disposed, and the instance that replaces it creates its adapter on its first render.
         if (!KioskDetector.IsKiosk || _jsAdapter is not null || _creatingAdapter || _disposed)
             return;
 
@@ -124,6 +126,9 @@ else
         {
             _creatingAdapter = false;
         }
+
+        if (_disposed)
+            return; // DisposeAsync published PlayerDestroyed and released the adapter: nothing after it.
 
         if (BackgroundColor is not null)
         {
@@ -149,9 +154,15 @@ else
 
         var fallbackUrl = usingNativeStreamUrl && !string.IsNullOrWhiteSpace(StreamUrl) ? StreamUrl : null;
 
+        if (_disposed)
+            return;
+
         await EventAggregator.GetEvent<PlayerInitialized>().Publish(
             new PlayerInitialized(_resolvedPlayerId, nativeUrl, rect.X, rect.Y, rect.Width, rect.Height,
                                   fw, fh, RoiX, RoiY, rw, rh, fallbackUrl));
+
+        if (_disposed)
+            return;
 
         await EventAggregator.GetEvent<PlayRequested>()
             .Publish(new PlayRequested(_resolvedPlayerId));
@@ -161,7 +172,10 @@ else
     /// Bug 075: creates the JS adapter for the placeholder and reads its first rect. Returns null when there is no
     /// adapter yet: the element is not in the DOM (video-surface.js returns no adapter), or the JS call failed
     /// (element or circuit gone). Such a failure never escapes OnAfterRenderAsync, where it would kill the Blazor
-    /// Server circuit; it is logged once as a warning and the next render tries again.
+    /// Server circuit; it is logged once as a warning and the surface's next own render tries again.
+    /// Each await is a window in which STATION STOP can dispose the component, so <see cref="_disposed"/> is
+    /// re-checked after each one, and whatever arrived for a disposed component is released here, because
+    /// DisposeAsync has already run and cannot see it.
     /// </summary>
     private async Task<(IJSObjectReference Adapter, PlayerRect Rect)?> TryCreateAdapterAsync()
     {
@@ -169,8 +183,17 @@ else
         try
         {
             _selfRef ??= DotNetObjectReference.Create(this);
-            _jsModule ??= await JsRuntime.InvokeAsync<IJSObjectReference>(
-                "import", VideoSurfaceConstants.ModulePath);
+            if (_jsModule is null)
+            {
+                var module = await JsRuntime.InvokeAsync<IJSObjectReference>(
+                    "import", VideoSurfaceConstants.ModulePath);
+                if (_disposed)
+                {
+                    await DisposeOrphanAsync(module, isAdapter: false);
+                    return null;
+                }
+                _jsModule = module;
+            }
 
             adapter = await _jsModule.InvokeAsync<IJSObjectReference?>(
                 "createAdapter", _placeholderRef, _resolvedPlayerId, _selfRef);
@@ -185,11 +208,17 @@ else
             if (_disposed)
             {
                 // Removed while createAdapter was in flight: the adapter would keep tracking a dead element.
-                await DisposeOrphanAdapterAsync(adapter);
+                await DisposeOrphanAsync(adapter, isAdapter: true);
                 return null;
             }
 
             var rect = await adapter.InvokeAsync<PlayerRect>("getRect");
+            if (_disposed)
+            {
+                // Removed while getRect was in flight (PR #26 review F1): same as above, and no PlayerInitialized.
+                await DisposeOrphanAsync(adapter, isAdapter: true);
+                return null;
+            }
             return (adapter, rect);
         }
         catch (Exception ex) when (ex is JSException or JSDisconnectedException or OperationCanceledException)
@@ -207,21 +236,24 @@ else
             }
 
             if (adapter is not null)
-                await DisposeOrphanAdapterAsync(adapter);
+                await DisposeOrphanAsync(adapter, isAdapter: true);
             return null;
         }
     }
 
-    private async Task DisposeOrphanAdapterAsync(IJSObjectReference adapter)
+    /// <summary>Releases a JS object this component no longer keeps: an adapter also gets its JS <c>dispose</c>
+    /// (it clears html.np-video, bug 590); the module reference is only released.</summary>
+    private async Task DisposeOrphanAsync(IJSObjectReference reference, bool isAdapter)
     {
         try
         {
-            await adapter.InvokeVoidAsync("dispose");
-            await adapter.DisposeAsync();
+            if (isAdapter)
+                await reference.InvokeVoidAsync("dispose");
+            await reference.DisposeAsync();
         }
         catch (Exception ex) when (ex is JSException or JSDisconnectedException or OperationCanceledException)
         {
-            Logger.LogDebug(ex, "VideoSurface {PlayerId}: disposing an unused adapter failed", _resolvedPlayerId);
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: releasing an unused JS object failed", _resolvedPlayerId);
         }
     }
 
