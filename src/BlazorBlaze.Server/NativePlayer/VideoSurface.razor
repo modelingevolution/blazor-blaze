@@ -7,7 +7,7 @@
 @inject IJSRuntime JsRuntime
 @inject ILogger<VideoSurface> Logger
 
-@if (KioskDetector.IsKiosk)
+@if (KioskDetector.IsNativePlayer)
 {
     <div @ref="_placeholderRef" data-np-video
          style="visibility:hidden; opacity:0; @PlaceholderSizeStyle @Style">
@@ -110,7 +110,7 @@ else
         // element-less creation is retried on the surface's own next render (a parameter change); a parent render
         // with unchanged parameters does not re-render it. A surface whose element is gone is in practice being
         // removed: it is disposed, and the instance that replaces it creates its adapter on its first render.
-        if (!KioskDetector.IsKiosk || _jsAdapter is not null || _creatingAdapter || _disposed)
+        if (!KioskDetector.IsNativePlayer || _jsAdapter is not null || _creatingAdapter || _disposed)
             return;
 
         PlayerRect rect;
@@ -265,7 +265,7 @@ else
     /// </summary>
     public Task PublishViewportAsync(double scale, double nPanX, double nPanY)
     {
-        if (!KioskDetector.IsKiosk)
+        if (!KioskDetector.IsNativePlayer)
             return Task.CompletedTask;
 
         return EventAggregator.GetEvent<ViewportChanged>()
@@ -283,7 +283,7 @@ else
     {
         _disposed = true;
 
-        if (!KioskDetector.IsKiosk)
+        if (!KioskDetector.IsNativePlayer)
         {
             _selfRef?.Dispose();
             _selfRef = null;
@@ -311,6 +311,11 @@ else
             {
                 Logger.LogDebug(ex, "VideoSurface {PlayerId}: circuit disconnected during dispose", _resolvedPlayerId);
             }
+            catch (JSException ex)
+            {
+                // Bug 075: the adapter's JS dispose failed (its element is gone); nothing may escape DisposeAsync.
+                Logger.LogDebug(ex, "VideoSurface {PlayerId}: JS adapter dispose failed", _resolvedPlayerId);
+            }
             catch (OperationCanceledException ex)
             {
                 Logger.LogDebug(ex, "VideoSurface {PlayerId}: JS call cancelled during dispose", _resolvedPlayerId);
@@ -331,6 +336,10 @@ else
         catch (JSDisconnectedException ex)
         {
             Logger.LogDebug(ex, "VideoSurface {PlayerId}: circuit disconnected during JS cleanup", _resolvedPlayerId);
+        }
+        catch (JSException ex)
+        {
+            Logger.LogDebug(ex, "VideoSurface {PlayerId}: releasing a JS reference failed during JS cleanup", _resolvedPlayerId);
         }
         catch (OperationCanceledException ex)
         {

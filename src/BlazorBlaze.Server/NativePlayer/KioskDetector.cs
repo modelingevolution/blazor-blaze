@@ -14,13 +14,13 @@ public sealed class KioskDetector : IKioskDetector
     /// <summary>
     /// Cached kiosk detection result for this scope/circuit.
     /// </summary>
-    public bool IsKiosk { get; }
+    public bool IsNativePlayer { get; }
 
     public KioskDetector(IHttpContextAccessor httpContextAccessor)
     {
         var userAgent = httpContextAccessor.HttpContext?.Request.Headers.UserAgent.ToString();
 
-        IsKiosk = !string.IsNullOrEmpty(userAgent)
+        IsNativePlayer = !string.IsNullOrEmpty(userAgent)
                   && userAgent.Contains(KioskUserAgentToken, StringComparison.OrdinalIgnoreCase);
     }
 }

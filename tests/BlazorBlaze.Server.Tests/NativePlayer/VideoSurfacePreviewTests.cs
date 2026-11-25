@@ -17,7 +17,7 @@ public sealed class VideoSurfacePreviewTests : BunitContext
     public VideoSurfacePreviewTests()
     {
         var kioskDetector = Substitute.For<IKioskDetector>();
-        kioskDetector.IsKiosk.Returns(true);
+        kioskDetector.IsNativePlayer.Returns(true);
         Services.AddSingleton(kioskDetector);
         Services.AddSingleton<IEventAggregator>(_ea);
 
@@ -168,7 +168,7 @@ public sealed class VideoSurfaceBrowserViewportTests : BunitContext
     public VideoSurfaceBrowserViewportTests()
     {
         var kioskDetector = Substitute.For<IKioskDetector>();
-        kioskDetector.IsKiosk.Returns(false);
+        kioskDetector.IsNativePlayer.Returns(false);
         Services.AddSingleton(kioskDetector);
         Services.AddSingleton<IEventAggregator>(_ea);
         _ea.GetEvent<ViewportChanged>().Subscribe(e => _viewportEvents.Add(e));
