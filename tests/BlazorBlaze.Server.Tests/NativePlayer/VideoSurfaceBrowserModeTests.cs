@@ -52,6 +52,15 @@ public sealed class VideoSurfaceBrowserModeTests : BunitContext
     }
 
     [Fact]
+    public void BrowserMode_HasNoVideoMarker()
+    {
+        var cut = Render<VideoSurface>(p =>
+            p.Add(vs => vs.StreamUrl, "http://localhost/stream"));
+
+        cut.FindAll("[data-np-video]").Should().BeEmpty();
+    }
+
+    [Fact]
     public void BrowserMode_NoJsModuleImported()
     {
         Render<VideoSurface>(p =>

@@ -1,3 +1,7 @@
-html.kiosk body {
+/* The kiosk page is see-through ONLY while a native video view is on it: the native player composites the video
+   beneath the transparent web view. video-surface.js keeps html.np-video while a VideoSurface is alive. Every page
+   without video keeps its normal (theme) body background, so nothing behind the window shows through (bug 590).
+   A class, not body:has([data-np-video]): :has() is unsupported in the kiosk WebKitGTK. */
+html.kiosk.np-video body {
     background: transparent !important;
 }
