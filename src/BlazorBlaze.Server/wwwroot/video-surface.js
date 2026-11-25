@@ -15,6 +15,16 @@ import { send as bridgeSend, sendSessionBootstrap } from "./video-surface-bridge
 
 const _activeAdapters = new Set();
 
+// The page is see-through ONLY while a native video view is on it (bug 590): the native player composites the video
+// BENEATH the transparent web view, so a page without video must paint its own background. The one place that says
+// "a video is here" is this adapter: html.np-video exists exactly while at least one adapter is alive
+// (native-player.css makes the body transparent under it). A class, not :has(), because :has() is unsupported in the
+// kiosk WebKitGTK.
+const VIDEO_CLASS = "np-video";
+function syncVideoClass() {
+    document.documentElement.classList.toggle(VIDEO_CLASS, _activeAdapters.size > 0);
+}
+
 // After the last observed change, keep re-measuring for this many animation frames before going
 // idle. The fullscreen-exit reflow settles over several frames, and on WebKitGTK (the kiosk
 // webview) the ResizeObserver/MutationObserver callbacks during that heavy relayout are
@@ -76,6 +86,7 @@ class NativePlayerAdapter {
         this.#stopPositionTracking();
         this.#dotnetRef = null;
         _activeAdapters.delete(this);
+        syncVideoClass();
     }
 
     #startPositionTracking() {
@@ -186,5 +197,6 @@ window.addEventListener("beforeunload", () => {
 export function createAdapter(element, playerId, dotnetRef) {
     const adapter = new NativePlayerAdapter(element, playerId, dotnetRef);
     _activeAdapters.add(adapter);
+    syncVideoClass();
     return adapter;
 }

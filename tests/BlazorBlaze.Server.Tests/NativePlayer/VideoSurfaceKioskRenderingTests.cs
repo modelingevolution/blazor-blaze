@@ -29,6 +29,15 @@ public sealed class VideoSurfaceKioskRenderingTests : BunitContext
     }
 
     [Fact]
+    public void KioskMode_PlaceholderCarriesTheVideoMarker()
+    {
+        var cut = Render<VideoSurface>(p =>
+            p.Add(vs => vs.StreamUrl, "http://localhost/stream"));
+
+        cut.Find("div").HasAttribute("data-np-video").Should().BeTrue();
+    }
+
+    [Fact]
     public void KioskMode_PlaceholderHasHiddenVisibility()
     {
         var cut = Render<VideoSurface>(p =>
