@@ -192,9 +192,17 @@ window.addEventListener("beforeunload", () => {
  * @param {HTMLElement} element - The placeholder element.
  * @param {string} playerId - The unique player ID.
  * @param {object} dotnetRef - DotNetObjectReference to the owning .NET component (must expose OnRectChanged).
- * @returns {NativePlayerAdapter} The adapter instance.
+ * @returns {NativePlayerAdapter|null} The adapter instance, or null when the element is not in the DOM.
  */
 export function createAdapter(element, playerId, dotnetRef) {
+    // Bug 075: Blazor hands over null for an element reference that is no longer on the page (STATION STOP
+    // swapped the run screen before OnAfterRenderAsync ran). Measuring it threw, and the uncaught error killed
+    // the circuit. No element, no adapter: VideoSurface retries on its next render. A detached element gets no
+    // adapter either; it would track a rect that is never shown. Once created, #element is never reassigned,
+    // so #computeRect only ever measures a non-null element (a later detached one measures as 0x0, no throw).
+    if (!element || !element.isConnected) {
+        return null;
+    }
     const adapter = new NativePlayerAdapter(element, playerId, dotnetRef);
     _activeAdapters.add(adapter);
     syncVideoClass();
